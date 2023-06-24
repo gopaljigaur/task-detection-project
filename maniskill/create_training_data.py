@@ -10,14 +10,29 @@ import shutil
 
 from typing import List
 
-pick_tasks = ["PickCube-v0", "StackCube-v0", "PickSingleYCB-v0",
-              "PickSingleEGAD-v0", "PickClutterYCB-v0"]
+pick_tasks = [
+    "PickCube-v0",
+    "StackCube-v0",
+    "PickSingleYCB-v0",
+    "PickSingleEGAD-v0",
+    "PickClutterYCB-v0",
+]
 assembly_tasks = ["PegInsertionSide-v0", "PlugCharger-v0", "AssemblingKits"]
 misc_tasks = ["PandaAvoidObstacles-v0", "TurnFaucet-v0"]
-manipulation_tasks = ["OpenCabinetDoor-v1",
-                      "OpenCabinetDrawer-v1", "PushChair-v1", "MoveBucket-v1"]
-soft_body_tasks = ["Excavate-v0", "Fill-v0",
-                   "Pour-v0", "Hang-v0", "Pinch-v0", "Write-v0"]
+manipulation_tasks = [
+    "OpenCabinetDoor-v1",
+    "OpenCabinetDrawer-v1",
+    "PushChair-v1",
+    "MoveBucket-v1",
+]
+soft_body_tasks = [
+    "Excavate-v0",
+    "Fill-v0",
+    "Pour-v0",
+    "Hang-v0",
+    "Pinch-v0",
+    "Write-v0",
+]
 
 cameras = ["base_camera", "hand_camera"]
 
@@ -31,7 +46,11 @@ if os.path.exists("data/bg_backup"):
     backgrounds = os.listdir("data/bg_backup")
 
 
-def create_test_set(tasks: List[str], num_samples_per_task: int = 20, save_path: str = "training_data/training_set"):
+def create_test_set(
+    tasks: List[str],
+    num_samples_per_task: int = 20,
+    save_path: str = "training_data/training_set",
+):
     label_dict = {}
     if not os.path.isdir("training_data"):
         os.mkdir("training_data")
@@ -39,11 +58,17 @@ def create_test_set(tasks: List[str], num_samples_per_task: int = 20, save_path:
         backgrounds_incl_none = backgrounds
         backgrounds_incl_none.append("")
         for background in backgrounds_incl_none:
-            create_test_data(task, save_path=save_path,
-                             background_name=background, num_samples=num_samples_per_task)
+            create_test_data(
+                task,
+                save_path=save_path,
+                background_name=background,
+                num_samples=num_samples_per_task,
+            )
 
 
-def create_test_data(task_name: str, save_path: str, background_name: str = "", num_samples: int = 100):
+def create_test_data(
+    task_name: str, save_path: str, background_name: str = "", num_samples: int = 100
+):
     bg_name = "minimal_bedroom"
     if background_name == "":
         bg_name = None
@@ -64,9 +89,13 @@ def create_test_data(task_name: str, save_path: str, background_name: str = "", 
         # obs contains information about picture
         images = obs["image"]
         imageplt.imsave(
-            f"{save_path}/{task_name}/{current_file_name}_0.png", images[cameras[0]]["rgb"])
+            f"{save_path}/{task_name}/{current_file_name}_0.png",
+            images[cameras[0]]["rgb"],
+        )
         imageplt.imsave(
-            f"{save_path}/{task_name}/{current_file_name}_1.png", images[cameras[1]]["rgb"])
+            f"{save_path}/{task_name}/{current_file_name}_1.png",
+            images[cameras[1]]["rgb"],
+        )
     env.close()
 
 
@@ -75,10 +104,14 @@ def swap_background(background_name: str):
         os.mkdir(background_folder)
     if os.path.isfile(f"{background_folder}{default_background_name}"):
         os.remove(f"{background_folder}{default_background_name}")
-    shutil.copy(f"{alternate_background_folder}{background_name}",
-                f"{background_folder}{default_background_name}")
+    shutil.copy(
+        f"{alternate_background_folder}{background_name}",
+        f"{background_folder}{default_background_name}",
+    )
 
 
 if __name__ == "__main__":
-    create_test_set(["PickCube-v0", "PickSingleYCB-v0",
-                    "PegInsertionSide-v0", "PlugCharger-v0"], num_samples_per_task=15)
+    create_test_set(
+        ["PickCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0", "PlugCharger-v0"],
+        num_samples_per_task=15,
+    )
