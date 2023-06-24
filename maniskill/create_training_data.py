@@ -65,9 +65,10 @@ def create_test_set(
             )
 
 
-def create_test_data(
-    task_name: str, save_path: str, background_name: str = "", num_samples: int = 100
-):
+def create_test_data(task_name: str,
+                     save_path: str,
+                     background_name: str = "",
+                     num_samples: int = 100):
     bg_name = "minimal_bedroom"
     if background_name == "":
         bg_name = None
@@ -111,6 +112,9 @@ def swap_background(background_name: str):
 
 if __name__ == "__main__":
     create_test_set(
-        ["PickCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0", "PlugCharger-v0"],
+        [
+            "PickCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0",
+            "PlugCharger-v0"
+        ],
         num_samples_per_task=15,
     )
