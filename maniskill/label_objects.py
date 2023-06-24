@@ -58,10 +58,9 @@ def label_interactive(path: str, overwrite: bool = False):
                         visible_patches = []
 
                     if image_file in current_info:
-                        if len(current_info[image_file]["points"]) > 0:
-                            for point in current_info[image_file]["points"]:
-                                y_pt, x_pt = map(lambda x: float(x.strip()),
-                                                 point.split(" "))
+                        if len(current_info[image_file]['points']) > 0:
+                            for point in current_info[image_file]['points']:
+                                x_pt, y_pt = map(lambda x: float(x.strip()), point.split(' '))
                                 center = (x_pt - 0.5, y_pt - 0.5)
                                 patch = plt.Circle(center,
                                                    radius,
