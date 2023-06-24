@@ -1,9 +1,10 @@
-import numpy as np
 import argparse
-import matplotlib.pyplot as plt
-from PIL import Image
 import os
+
+import matplotlib.pyplot as plt
+import numpy as np
 import yaml
+from PIL import Image
 
 
 def label_interactive(path: str, overwrite: bool = False):
