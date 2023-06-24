@@ -1,14 +1,13 @@
+import os
 import random
+import shutil
+import time
+from typing import List
 
 import gym
 import mani_skill2.envs
-import matplotlib.pyplot as plt
 import matplotlib.image as imageplt
-import os
-import time
-import shutil
-
-from typing import List
+import matplotlib.pyplot as plt
 
 pick_tasks = [
     "PickCube-v0",
