@@ -27,7 +27,8 @@ def label_interactive(path: str, overwrite: bool = False):
                     current_info = {}
                     # check if the current image's data has already been stored, otherwise skip it
                     labels_file = os.path.join(path, task_dir, "labels.yml")
-                    if os.path.exists(labels_file) and os.path.getsize(labels_file) > 0:
+                    if os.path.exists(labels_file) and os.path.getsize(
+                            labels_file) > 0:
                         stream = open(labels_file, "r")
                         current_info = yaml.load(stream, Loader=yaml.Loader)
                         stream.close()
@@ -40,8 +41,8 @@ def label_interactive(path: str, overwrite: bool = False):
                                 print("Overwriting...")
 
                     pil_image = Image.open(
-                        os.path.join(path, task_dir, image_file)
-                    ).convert("RGB")
+                        os.path.join(path, task_dir,
+                                     image_file)).convert("RGB")
 
                     radius = 1
                     # plot image
@@ -59,13 +60,12 @@ def label_interactive(path: str, overwrite: bool = False):
                     if image_file in current_info:
                         if len(current_info[image_file]["points"]) > 0:
                             for point in current_info[image_file]["points"]:
-                                y_pt, x_pt = map(
-                                    lambda x: float(x.strip()), point.split(" ")
-                                )
+                                y_pt, x_pt = map(lambda x: float(x.strip()),
+                                                 point.split(" "))
                                 center = (x_pt - 0.5, y_pt - 0.5)
-                                patch = plt.Circle(
-                                    center, radius, color=(1, 0, 0, 0.75)
-                                )
+                                patch = plt.Circle(center,
+                                                   radius,
+                                                   color=(1, 0, 0, 0.75))
                                 axes.add_patch(patch)
                                 visible_patches.append(patch)
 
@@ -77,8 +77,7 @@ def label_interactive(path: str, overwrite: bool = False):
                             show_clicks=True,
                             mouse_stop=plt.MouseButton.RIGHT,
                             mouse_pop=plt.MouseButton.MIDDLE,
-                        )
-                    )
+                        ))
                     print(pts)
 
                     if len(pts) > 0:
@@ -98,7 +97,9 @@ def label_interactive(path: str, overwrite: bool = False):
                             # draw chosen point
                             center = (x_coor - 0.5, y_coor - 0.5)
 
-                            patch = plt.Circle(center, radius, color=(1, 0, 0, 0.75))
+                            patch = plt.Circle(center,
+                                               radius,
+                                               color=(1, 0, 0, 0.75))
                             axes.add_patch(patch)
                             visible_patches.append(patch)
                         plt.draw()
@@ -123,11 +124,11 @@ def str2bool(v):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Label the objects in the training set of images."
-    )
-    parser.add_argument(
-        "--path", type=str, required=True, help="Path to the dataset directory"
-    )
+        description="Label the objects in the training set of images.")
+    parser.add_argument("--path",
+                        type=str,
+                        required=True,
+                        help="Path to the dataset directory")
     parser.add_argument(
         "--overwrite",
         default="False",
