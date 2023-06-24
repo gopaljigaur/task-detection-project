@@ -72,4 +72,4 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
-    create_test_set(["PickCube-v0", "StackCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0", "PlugCharger-v0"])
+    create_test_set(["PickCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0", "PlugCharger-v0"], num_samples_per_task=15)
