@@ -44,6 +44,6 @@ Use `make` to install the project dependencies and set up the necessary configur
 
 At this point, the project is set up and ready to use. You can now proceed with your desired workflow.
 
-
 #### Resources
+
 [dino-vit-features](https://github.com/ShirAmir/dino-vit-features), [maniskill2](https://maniskill2.github.io/)
