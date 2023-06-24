@@ -11,7 +11,7 @@ def label_interactive(path: str, overwrite: bool = False):
      :param path: path to image directory.
      :param stride: stride of the model.
     """
-
+    
     # plot
     if os.path.exists(path):
         for task_dir in os.listdir(path):
@@ -25,7 +25,7 @@ def label_interactive(path: str, overwrite: bool = False):
                     current_info = {}
                     # check if the current image's data has already been stored, otherwise skip it
                     labels_file = os.path.join(path, task_dir, 'labels.yml')
-                    if os.path.exists(labels_file):
+                    if os.path.exists(labels_file) and os.path.getsize(labels_file) > 0:
                         stream = open(labels_file, 'r')
                         current_info = yaml.load(stream, Loader=yaml.Loader)
                         stream.close()
@@ -40,36 +40,51 @@ def label_interactive(path: str, overwrite: bool = False):
                     pil_image = Image.open(os.path.join(path, task_dir, image_file)).convert('RGB')
                     
                     radius = 1
-                    # plot image and the chosen patch. if nothing marked chosen patch is cls patch.
+                    # plot image
                     axes.imshow(pil_image)
                     # get input point from user
-                    fig.suptitle('Select a point on the image', fontsize=16)
-                    plt.draw()
-                    pts = np.asarray(plt.ginput(1, timeout=-1, mouse_stop=plt.MouseButton.RIGHT, mouse_pop=None))
+                    fig.suptitle('Select points on the image (LClick). Next Image (RClick)', fontsize=16)
                     # reset previous marks
                     for patch in visible_patches:
-                            patch.remove()
-                            visible_patches = []
-                    if len(pts) == 1:
-                        print("Selected point: (%f, %f)\n" % (pts[0, 1], pts[0, 0]))
+                        patch.remove()
+                        visible_patches = []
+                    
+                    if image_file in current_info:
+                        if len(current_info[image_file]['points']) > 0:
+                            for point in current_info[image_file]['points']:
+                                y_pt, x_pt = map(lambda x: float(x.strip()), point.split(' '))
+                                center = (x_pt - 0.5, y_pt - 0.5)
+                                patch = plt.Circle(center, radius, color=(1, 0, 0, 0.75))
+                                axes.add_patch(patch)
+                                visible_patches.append(patch)
+                        
+                    plt.draw()
+                    pts = np.asarray(plt.ginput(n=-1, timeout=-1, show_clicks=True, mouse_stop=plt.MouseButton.RIGHT, mouse_pop=plt.MouseButton.MIDDLE))
+                    print(pts)
+                    
+                    if len(pts) > 0:
+                        points = [str(pt)[1:-1].strip() for pt in pts]
                         current_info[image_file] = {
                             'task_name': task_dir,
-                            'obj_loc': str((pts[0, 1], pts[0, 0]))
+                            'points': points
                         }
                         stream = open(labels_file, 'w')
                         yaml.dump(current_info, stream) 
                         stream.close()
-                        y_coor, x_coor = int(pts[0, 1]), int(pts[0, 0])
                         
-                        # draw chosen point
-                        center = (x_coor - 0.5, y_coor - 0.5)
+                        for pt in pts:
+                            print("Selected point: (%f, %f)" % (pt[1], pt[0]))
+                            y_coor, x_coor = int(pt[1]), int(pt[0])
                         
-                        patch = plt.Circle(center, radius, color=(1, 0, 0, 0.75))
-                        axes.add_patch(patch)
-                        visible_patches.append(patch)
+                            # draw chosen point
+                            center = (x_coor - 0.5, y_coor - 0.5)
+                            
+                            patch = plt.Circle(center, radius, color=(1, 0, 0, 0.75))
+                            axes.add_patch(patch)
+                            visible_patches.append(patch)
                         plt.draw()
     else:
-        print('Data directory does not exitst')
+        print('Data directory does not exist. Exiting...')
         return
 
 """ taken from https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse"""
