@@ -7,7 +7,7 @@ setup-vit:
 	conda install pytorch torchvision torchaudio cudatoolkit=11 -c pytorch
 	conda install tqdm
 	conda install -c conda-forge faiss
-	conda install -c conda-forge timm 
+	conda install -c conda-forge timm
 	conda install matplotlib
 	pip install opencv-python
 	pip install git+https://github.com/lucasb-eyer/pydensecrf.git
@@ -24,7 +24,7 @@ setup-ni:
 	conda install -y pytorch torchvision torchaudio cudatoolkit=11 -c pytorch
 	conda install -y tqdm
 	conda install -y -c conda-forge faiss
-	conda install -y -c conda-forge timm 
+	conda install -y -c conda-forge timm
 	conda install -y matplotlib
 	pip install opencv-python
 	pip install git+https://github.com/lucasb-eyer/pydensecrf.git
