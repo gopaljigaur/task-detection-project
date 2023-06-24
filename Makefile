@@ -17,7 +17,7 @@ setup-mani:
 	echo "Installing maniskill2..."
 	pip install mani-skill2
 	echo "Downloading maniskill assets..."
-	python -m mani_skill2.utils.download_demo rigid-body -o ./maniskill/data
+	python -m mani_skill2.utils.download_demo rigid_body -o ./maniskill/data
 
 setup-ni:
 	echo "Installing dependencies for Vision Transformer..."
@@ -32,4 +32,4 @@ setup-ni:
 	echo "Installing maniskill2..."
 	pip install mani-skill2
 	echo "Downloading maniskill assets..."
-	python -m mani_skill2.utils.download_demo rigid-body -o ./maniskill/data
+	python -m mani_skill2.utils.download_demo rigid_body -o ./maniskill/data
