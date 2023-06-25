@@ -162,4 +162,3 @@ cython_debug/
 data
 demos
 imgui.ini
-training_data/training_set/*.png
