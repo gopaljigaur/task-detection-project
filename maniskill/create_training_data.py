@@ -27,30 +27,57 @@ backgrounds = []
 if os.path.exists("data/bg_backup"):
     backgrounds = os.listdir("data/bg_backup")
 
-def create_test_set(tasks: List[str], num_samples_per_task: int = 20, save_path: str = "training_data/training_set"):
+
+def create_data_set(tasks: List[str],
+                    num_samples_per_task: int = 20,
+                    save_path: str = "training_data/training_set",
+                    objects: List[str] = None):
     label_dict = {}
     if not os.path.isdir("training_data"):
         os.mkdir("training_data")
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
     for task in tasks:
         backgrounds_incl_none = backgrounds
         backgrounds_incl_none.append("")
         for background in backgrounds_incl_none:
-            create_test_data(task, save_path=save_path, background_name=background, num_samples=num_samples_per_task)
+            path = f"{save_path}/{task}"
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            if objects is None:
+                create_data(task,
+                            save_path=path,
+                            background_name=background,
+                            num_samples=num_samples_per_task)
+            else:
+                ## only use single object of list
+                for obj in objects:
+                    path = f"{save_path}/{task}/{obj}"
+                    create_data(task,
+                                save_path=path,
+                                background_name=background,
+                                num_samples=num_samples_per_task,
+                                objects=[obj])
 
 
-def create_test_data(task_name: str, save_path: str, background_name: str = "", num_samples: int = 100):
+def create_data(task_name: str,
+                save_path: str,
+                background_name: str = "",
+                num_samples: int = 100,
+                objects: List[str] = None):
     bg_name = "minimal_bedroom"
     if background_name == "":
         bg_name = None
     else:
         swap_background(background_name)
     # env = gym.make(task_name, obs_mode="rgbd", control_mode="pd_joint_delta_pos", bg_name=bg_name)
-    env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name)
+    if objects is None:
+        env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name)
+    else:
+        env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name, model_ids=objects)
     # check if folders for saving are created
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
-    if not os.path.isdir(f"{save_path}/{task_name}"):
-        os.mkdir(f"{save_path}/{task_name}")
     for _ in range(num_samples):
         current_file_name = round(time.time() * 1000)
         env.reset(seed=random.randint(0, 2147483647))
@@ -58,8 +85,8 @@ def create_test_data(task_name: str, save_path: str, background_name: str = "", 
         obs, reward, done, info = env.step(action)
         # obs contains information about picture
         images = obs["image"]
-        imageplt.imsave(f"{save_path}/{task_name}/{current_file_name}_0.png", images[cameras[0]]["rgb"])
-        imageplt.imsave(f"{save_path}/{task_name}/{current_file_name}_1.png", images[cameras[1]]["rgb"])
+        imageplt.imsave(f"{save_path}/{current_file_name}_0.png", images[cameras[0]]["rgb"])
+        imageplt.imsave(f"{save_path}/{current_file_name}_1.png", images[cameras[1]]["rgb"])
     env.close()
 
 
@@ -72,4 +99,6 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
-    create_test_set(["PickCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0", "PlugCharger-v0"], num_samples_per_task=15)
+    create_data_set(["PickSingleYCB-v0"],
+                    num_samples_per_task=15,
+                    objects=["011_banana", "030_fork", "048_hammer", "055_baseball", "024_bowl"])
