@@ -28,15 +28,36 @@ if os.path.exists("data/bg_backup"):
     backgrounds = os.listdir("data/bg_backup")
 
 
-def create_data_set(tasks: List[str], num_samples_per_task: int = 20, save_path: str = "training_data/training_set"):
+def create_data_set(tasks: List[str],
+                    num_samples_per_task: int = 20,
+                    save_path: str = "training_data/training_set",
+                    objects: List[str] = None):
     label_dict = {}
     if not os.path.isdir("training_data"):
         os.mkdir("training_data")
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
     for task in tasks:
         backgrounds_incl_none = backgrounds
         backgrounds_incl_none.append("")
         for background in backgrounds_incl_none:
-            create_data(task, save_path=f"{save_path}/{task}", background_name=background, num_samples=num_samples_per_task)
+            path = f"{save_path}/{task}"
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            if objects is None:
+                create_data(task,
+                            save_path=path,
+                            background_name=background,
+                            num_samples=num_samples_per_task)
+            else:
+                ## only use single object of list
+                for obj in objects:
+                    path = f"{save_path}/{task}/{obj}"
+                    create_data(task,
+                                save_path=path,
+                                background_name=background,
+                                num_samples=num_samples_per_task,
+                                objects=[obj])
 
 
 def create_data(task_name: str,
@@ -57,8 +78,6 @@ def create_data(task_name: str,
     # check if folders for saving are created
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
-    if not os.path.isdir(f"{save_path}/{task_name}"):
-        os.mkdir(f"{save_path}/{task_name}")
     for _ in range(num_samples):
         current_file_name = round(time.time() * 1000)
         env.reset(seed=random.randint(0, 2147483647))
@@ -80,4 +99,6 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
-    create_data_set(["PickCube-v0", "PickSingleYCB-v0", "PegInsertionSide-v0", "PlugCharger-v0"], num_samples_per_task=15)
+    create_data_set(["PickSingleYCB-v0"],
+                    num_samples_per_task=15,
+                    objects=["011_banana", "030_fork", "048_hammer", "055_baseball", "024_bowl"])
