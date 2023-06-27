@@ -17,13 +17,15 @@ extractor = ViTExtractor(stride=8)
 
 def get_descriptor(image_path: str, coordinates: List[str]):
     image = mpimg.imread(image_path)
-    image = image.reshape((1,4,128,128))
+    # image = image.reshape((1,4,128,128))
+    image = np.expand_dims(image, axis=0)
+    image = np.transpose(image,(0,3,1,2))
     image = torch.Tensor(image[:,:3,:,:]).to(device)
     embeddings = extractor.extract_descriptors(image)
     x_int = int(coordinates[0].split(" ")[0].split(".")[0])
     y_int = int(coordinates[0].split(" ")[-1].split(".")[0])
-    x_patch = x_int % 8
-    y_patch = y_int % 8
+    x_patch = x_int / 8
+    y_patch = y_int / 8
     patch_num = (128 / 8) * y_patch + x_patch
     return embeddings[0,0,int(patch_num)]
 
