@@ -18,6 +18,7 @@ import gc
 
 torch.cuda.empty_cache()
 stride = 4
+patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 extractor = ViTExtractor()
 
@@ -29,28 +30,34 @@ def import_image(image_path:str):
     image = torch.Tensor(image[:, :3, :, :]).to(device)
     return image
 
+def find_patch_num(coord:int):
+    patch = int((coord - (patch_size/2)) / stride)
+    return patch
 
-def get_descriptor(image_path: str, coordinates: List[str]):
+def get_descriptor(image_path: str, coordinates: str):
     image = import_image(image_path)
     embeddings = extractor.extract_descriptors(image)
-    x_int = int(coordinates[0].split(" ")[0].split(".")[0])
-    y_int = int(coordinates[0].split(" ")[-1].split(".")[0])
-    x_patch = x_int / stride
-    y_patch = y_int / stride
-    patch_num = (128 / stride) * y_patch + x_patch
+    x_int = int(coordinates.split(" ")[0].split(".")[0])
+    y_int = int(coordinates.split(" ")[-1].split(".")[0])
+    # x_patch = x_int / stride
+    # y_patch = int(y_int / stride)
+    x_patch = find_patch_num(x_int)
+    y_patch = find_patch_num(y_int)
+    patch_num = ((128 / stride)-1) * y_patch + x_patch
     return embeddings[0,0,int(patch_num)]
 
 
 def compare_descriptors(target_descriptors:torch.Tensor, comparator_descriptors: torch.Tensor):
     distance = pairwise_manhattan_distance(comparator_descriptors, target_descriptors)
+    distance[torch.where(distance == 0.)] = 10000
     arg_min = torch.argmin(distance).item()
     target_argmin = arg_min % target_descriptors.shape[0]
     comparator_argmin = int(arg_min / target_descriptors.shape[0])
-    return [distance[target_argmin][target_argmin].cpu().detach().item(), comparator_argmin]
+    return [distance[comparator_argmin][target_argmin].detach().item(), comparator_argmin]
 
 def render_patch(image_path:str, patch:int):
     image = mpimg.imread(image_path)
-    x_start = patch % stride
+    x_start = patch % int(128/stride)
     y_start = patch / (128/stride)
     [x_lwr,x_upr] = [x_start*stride,x_start*stride+8]
     [y_lwr,y_upr] = [int(y_start*4),int(y_start*stride+8)]
@@ -75,7 +82,7 @@ if __name__ == '__main__':
                 descriptors = torch.tensor([],device=device)
                 for key, value in labels.items():
                     for point_pair in value["points"]:
-                        descriptor = get_descriptor(os.path.join(os.path.join(task_folder, key)), point_pair)
+                        descriptor = get_descriptor(os.path.join(os.path.join(task_folder, key)), point_pair).detach()
                         descriptors = torch.cat([descriptors,descriptor.reshape(1,descriptor.shape[0])])
                 # calculate pairwise manhattan
                 manhattan = pairwise_manhattan_distance(descriptors)
