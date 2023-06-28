@@ -11,9 +11,15 @@ from torchvision import transforms
 from dino.extractor import ViTExtractor
 from matplotlib import pyplot as plt
 from matplotlib import image as mpimg
+import torch
+import gc
 
+
+
+torch.cuda.empty_cache()
+stride = 4
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-extractor = ViTExtractor(stride=8)
+extractor = ViTExtractor()
 
 def import_image(image_path:str):
     image = mpimg.imread(image_path)
@@ -29,25 +35,27 @@ def get_descriptor(image_path: str, coordinates: List[str]):
     embeddings = extractor.extract_descriptors(image)
     x_int = int(coordinates[0].split(" ")[0].split(".")[0])
     y_int = int(coordinates[0].split(" ")[-1].split(".")[0])
-    x_patch = x_int / 8
-    y_patch = y_int / 8
-    patch_num = (128 / 8) * y_patch + x_patch
+    x_patch = x_int / stride
+    y_patch = y_int / stride
+    patch_num = (128 / stride) * y_patch + x_patch
     return embeddings[0,0,int(patch_num)]
 
 
 def compare_descriptors(target_descriptors:torch.Tensor, comparator_descriptors: torch.Tensor):
     distance = pairwise_manhattan_distance(comparator_descriptors, target_descriptors)
     arg_min = torch.argmin(distance).item()
-    return [distance[arg_min], arg_min]
+    target_argmin = arg_min % target_descriptors.shape[0]
+    comparator_argmin = int(arg_min / target_descriptors.shape[0])
+    return [distance[target_argmin][target_argmin].cpu().detach().item(), comparator_argmin]
 
 def render_patch(image_path:str, patch:int):
     image = mpimg.imread(image_path)
-    x_start = patch % 8
-    y_start = patch / (128/8)
-    [x_lwr,x_upr] = [x_start*8-8,x_start*8+16]
-    [y_lwr,y_upr] = [int(y_start*8-8),int(y_start*8+16)]
+    x_start = patch % stride
+    y_start = patch / (128/stride)
+    [x_lwr,x_upr] = [x_start*stride,x_start*stride+8]
+    [y_lwr,y_upr] = [int(y_start*4),int(y_start*stride+8)]
     sub_image = image[y_lwr:y_upr,x_lwr:x_upr,:]
-    plt.imshow(sub_image)
+    plt.imshow(sub_image, extent=[x_lwr,x_upr,y_upr,y_lwr])
     plt.show()
     plt.imshow(image)
     plt.show()
