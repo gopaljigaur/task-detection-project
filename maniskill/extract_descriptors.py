@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/project/dl2023s/gaurg/task-detection-project/dino')
+
 import os
 from typing import List
 from torchmetrics.functional import pairwise_manhattan_distance
@@ -8,7 +11,7 @@ import torch.utils.data
 import torchvision.datasets
 import yaml
 from torchvision import transforms
-from dino.extractor import ViTExtractor
+from extractor import ViTExtractor
 from matplotlib import pyplot as plt
 from matplotlib import image as mpimg
 import torch
