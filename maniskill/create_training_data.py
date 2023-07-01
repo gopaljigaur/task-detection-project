@@ -1,5 +1,5 @@
 import random
-
+import custom_tasks.multiple_object_tasks
 import gym
 import mani_skill2.envs
 import matplotlib.pyplot as plt
@@ -99,6 +99,6 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
-    create_data_set(["PickSingleYCB-v0"],
-                    num_samples_per_task=15,
-                    objects=["011_banana", "030_fork", "048_hammer", "055_baseball", "024_bowl"])
+    create_data_set(["BananaInBowl-v0"],
+                    num_samples_per_task=15
+                    )

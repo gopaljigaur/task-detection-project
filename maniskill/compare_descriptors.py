@@ -14,7 +14,7 @@ patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 extractor = ViTExtractor(stride=stride)
 
-def object_in_scene(image_path: str, object_descriptors: torch.Tensor, threshold: float = 0.6):
+def object_in_scene(image_path: str, object_descriptors: torch.Tensor, threshold: float = 0.56):
     object_descriptors = torch.transpose(object_descriptors, 0, 2)
     image_descriptors = get_descriptors(image_path)
     # computer similarities
@@ -26,12 +26,12 @@ def object_in_scene(image_path: str, object_descriptors: torch.Tensor, threshold
     sim, idx = sims[0], idxs[0]
     if sim < threshold:
         # object not in scene
-        return [False, []]
+        return [False, [], sim]
     idx = idx % (num_patches[0] * num_patches[1])
     y_desc, x_desc = idx // num_patches[1], idx % num_patches[1]
-    coordinates = [(x_desc - 1) * stride + stride + patch_size // 2 - .5,
-              (y_desc - 1) * stride + stride + patch_size // 2 - .5]
-    return [True, coordinates]
+    coordinates = [((x_desc - 1) * stride + stride + patch_size // 2 - .5).item(),
+                   ((y_desc - 1) * stride + stride + patch_size // 2 - .5).item()]
+    return [True, coordinates, sim]
 
 
 def compare_image(descriptors: torch.Tensor, descriptor_labels: List[str], image_path: str):
@@ -77,12 +77,12 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
 
 if __name__ == '__main__':
     base_path = "training_data/training_set"
-    task = os.path.join(base_path, "PickUpFork-v0")
-    image = os.path.join(task,"1687693896925_1.png")
+    task = os.path.join(base_path, "BananaInBowl-v0")
+    image = os.path.join(task,"1688229886422_1.png")
     all_descriptors = pkl.load(open(f"training_data/descriptors.pkl", "rb"))
     labels = pkl.load(open(f"training_data/descriptor_labels.pkl", "rb"))
     descriptor_dict = reformat_descriptors(all_descriptors,labels)
     for ycb_object in descriptor_dict:
-        [is_present, coords] = object_in_scene(image, ycb_object["descriptors"])
-        print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}")
+        [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
+        print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
     # compare_image(all_descriptors, labels, image)
