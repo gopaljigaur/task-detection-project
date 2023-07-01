@@ -1,19 +1,12 @@
 import os
-from typing import List
 from torchmetrics.functional import pairwise_manhattan_distance
-import matplotlib.image as imgplt
-import matplotlib.pyplot as plt
 import numpy as np
 import torch.utils.data
-import torchvision.datasets
 import yaml
-from torchvision import transforms
 from dino.extractor import ViTExtractor
 from matplotlib import pyplot as plt
 from matplotlib import image as mpimg
 import torch
-import gc
-
 
 torch.cuda.empty_cache()
 stride = 2

@@ -1,7 +1,3 @@
-import os
-import matplotlib.image as imgplt
-import matplotlib.pyplot as plt
-import numpy as np
 import torch.utils.data
 import torchvision.datasets
 from torchvision import transforms
