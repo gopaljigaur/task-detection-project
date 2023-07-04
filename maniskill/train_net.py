@@ -15,7 +15,7 @@ criterion = nn.MSELoss()
 optim = optim.SGD(net.get_trainable_params(), lr=0.01)
 
 dataset = ImageFolder("training_data/training_set", transform=transforms.ToTensor())
-data_loader = DataLoader(dataset=dataset, batch_size=16)
+data_loader = DataLoader(dataset=dataset, batch_size=16, shuffle=True)
 
 num_epochs = 10
 for epoch in range(num_epochs):

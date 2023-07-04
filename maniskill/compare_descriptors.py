@@ -82,7 +82,24 @@ if __name__ == '__main__':
     all_descriptors = pkl.load(open(f"training_data/descriptors.pkl", "rb"))
     labels = pkl.load(open(f"training_data/descriptor_labels.pkl", "rb"))
     descriptor_dict = reformat_descriptors(all_descriptors,labels)
-    for ycb_object in descriptor_dict:
-        [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
-        print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
+    # for ycb_object in descriptor_dict:
+    #     [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
+    #     print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
     # compare_image(all_descriptors, labels, image)
+
+    for task in os.listdir(base_path):
+        print(f"{task}------------------------------------------")
+        task_folder = os.path.join(base_path,task)
+        for im_file in os.listdir(task_folder):
+            if not im_file.__contains__(".png"):
+                continue
+            image = os.path.join(task_folder,im_file)
+            print(f"{os.path.join(task,im_file)}: ",end=" ")
+            for ycb_object in descriptor_dict:
+                [present, _, sim] = object_in_scene(image, ycb_object["descriptors"], threshold=0.46)
+                if present:
+                    print(f"{ycb_object['object']} {sim}", end=" ")
+                    continue
+                if task == ycb_object['object']:
+                    print(f"--- {task} {sim}", end=" ")
+            print()
