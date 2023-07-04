@@ -15,6 +15,8 @@ class TaskClassifier(nn.Module):
         super().__init__()
         self.n_classes = n_classes
         self.extractor = ViTExtractor(stride=vit_stride)
+        for param in self.extractor.model.parameters():
+            param.requires_grad = False
         self.obj_finder = ObjectLocator(self.extractor)
         # create fc layer to get task
         self.classifier = nn.Linear(self.n_classes * 3, self.n_classes).cuda()
@@ -23,14 +25,13 @@ class TaskClassifier(nn.Module):
         # extract descriptors from image
         with torch.inference_mode():
             x = self.extractor.extract_descriptors(x)
-            # map descriptors to object locations
-            x = self.obj_finder(x)
+        # map descriptors to object locations
+        x = self.obj_finder(x)
         # get prediction using a linear layer
-            x = x.flatten()
         copied_tensor = x.clone().detach().requires_grad_(True)
         copied_tensor = self.classifier(copied_tensor)
         copied_tensor = F.relu(copied_tensor)
-        return F.softmax(copied_tensor)
+        return F.softmax(copied_tensor, dim=1)
 
     def convert_to_image(self, image_path: str):
         return self.extractor.preprocess(image_path)[1]
@@ -93,16 +94,19 @@ class ObjectLocator:
                 obj_descr = obj["descriptors"]
                 similarities = chunk_cosine_sim(obj_descr, x)
                 # find best matching position
-                sims, idxs = torch.topk(similarities.flatten(), 1)
+                sims, idxs = torch.topk(similarities.flatten(1), 1)
                 sim, idx = sims[0], idxs[0]
-                if sim < self.threshold:
-                    # object not currently present in scene
-                    obj_locations = torch.cat((obj_locations, torch.tensor([-99,-99,-99], device=device)))
-                    continue
-                patch_idx = idx % (self.extractor.num_patches[0] * self.extractor.num_patches[1])
+                # if sim < self.threshold:
+                #     # object not currently present in scene
+                #     obj_locations = torch.cat((obj_locations, torch.tensor([-99, -99, -99], device=device)))
+                #     continue
+                patch_idx = idxs % (self.extractor.num_patches[0] * self.extractor.num_patches[1])
                 y_desc, x_desc = patch_idx // self.extractor.num_patches[1], patch_idx % self.extractor.num_patches[1]
-                coordinates = [(x_desc.item() - 1) * self.extractor.stride[1] + self.extractor.stride[1] + self.extractor.model.patch_embed.patch_size // 2 - .5,
-                               (y_desc.item() - 1) * self.extractor.stride[0] + self.extractor.stride[0] + self.extractor.model.patch_embed.patch_size // 2 - .5,
-                               0]
-                obj_locations = torch.cat((obj_locations, torch.tensor(coordinates, device=device)))
+                coordinates = torch.cat(((x_desc - 1) * self.extractor.stride[1] + self.extractor.stride[1] + self.extractor.model.patch_embed.patch_size // 2 - .5,
+                               (y_desc - 1) * self.extractor.stride[0] + self.extractor.stride[0] + self.extractor.model.patch_embed.patch_size // 2 - .5,
+                               torch.zeros((idxs.shape[0],1), device=device)),1)
+                # obj_locations = torch.cat((obj_locations, torch.tensor(coordinates, device=device)))
+                not_present = torch.tensor([0, 0, 0], device=device)
+                obj_locations = torch.cat((obj_locations, torch.where(sims > self.threshold, coordinates, not_present)),dim=1)
+            obj_locations.requires_grad=True
             return obj_locations
