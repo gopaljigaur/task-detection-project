@@ -17,3 +17,4 @@ if __name__ == '__main__':
         images, labels = images.to(device), labels.to(device)
         # imgs should be imagenet normalized tensors. shape BxCxHxW
         descriptors = extractor.extract_descriptors(images)
+
