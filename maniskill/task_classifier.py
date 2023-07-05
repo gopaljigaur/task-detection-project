@@ -1,6 +1,10 @@
 import torch.nn as nn
 import torch.optim as optim
 import torch
+from PIL import Image
+from torchvision.datasets import ImageFolder
+from torchvision.transforms import transforms
+
 from dino.extractor import ViTExtractor
 import torch.nn.functional as F
 import pickle as pkl
@@ -33,12 +37,51 @@ class TaskClassifier(nn.Module):
         copied_tensor = F.relu(copied_tensor)
         return F.softmax(copied_tensor, dim=1)
 
+    def cached_forward(self, x: torch.Tensor):
+        # map descriptors to object locations
+        x = self.obj_finder(x)
+        x = self.classifier(x)
+        x = F.relu(x)
+        return F.softmax(x, dim=1)
+
+    def cache_object_output(self, x: torch.Tensor):
+        # extract descriptors from image
+        with torch.inference_mode():
+            x = self.extractor.extract_descriptors(x)
+        # get prediction using a linear layer
+        copied_tensor = x.clone().detach().requires_grad_(True)
+        return copied_tensor
+
+
     def convert_to_image(self, image_path: str):
         return self.extractor.preprocess(image_path)[1]
 
     def get_trainable_params(self):
         return self.classifier.parameters()
 
+    def preprocess(self, image_base_path:str):
+        dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
+        tensors = []
+        labels = []
+        for [image, label] in dataset.imgs:
+            with open(image, "rb") as f:
+                img = Image.open(f).convert("RGB")
+                transformer = transforms.ToTensor()
+                tensor = transformer(img).unsqueeze(0).to(device)
+                tensor = self.cache_object_output(tensor)
+                tensors.append(tensor)
+                labels.append(label)
+                torch.save(tensor, f"{image.split('.')[0]}.pt")
+
+    def load_cache(self, image_base_path: str):
+        dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
+        tensors = []
+        labels = []
+        for [image, label] in dataset.imgs:
+            tensor = torch.load(f"{image.split('.')[0]}.pt")
+            tensors.append(tensor.squeeze(0))
+            labels.append(label)
+        return [tensors, labels]
 
 def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """ Computes cosine similarity between all possible pairs in two sets of vectors.

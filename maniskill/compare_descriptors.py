@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 
 from dino.extractor import ViTExtractor
 from maniskill.extract_descriptors import get_descriptors, chunk_cosine_sim
+from maniskill.task_classifier import *
 
 stride = 2
 patch_size = 8
@@ -74,32 +75,53 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
     return objects
 
 
+def compare(img_path: str):
+    net = TaskClassifier(vit_stride=2)
+    [tensors, labels] = net.load_cache(img_path)
+    found = 0
+    wrong = 0
+    extra = 0
+    for tensor, label in zip(tensors,labels):
+        if not tensor[label*3] == 0.:
+            found += 1
+        else:
+            if torch.count_nonzero(tensor) > 0:
+                wrong += 1
+        if torch.count_nonzero(tensor) > 2:
+            extra += 1
+    print(f"Found {found} objects in the correct scene")
+    print(f"Found wrong objects in scene {wrong} times")
+    print(f"Found multiple objects in scene {extra} times")
+    print(f"total objects: {len(labels)}")
+
+
 
 if __name__ == '__main__':
     base_path = "training_data/training_set"
-    task = os.path.join(base_path, "BananaInBowl-v0")
-    image = os.path.join(task,"1688229886422_1.png")
-    all_descriptors = pkl.load(open(f"training_data/descriptors.pkl", "rb"))
-    labels = pkl.load(open(f"training_data/descriptor_labels.pkl", "rb"))
-    descriptor_dict = reformat_descriptors(all_descriptors,labels)
-    # for ycb_object in descriptor_dict:
-    #     [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
-    #     print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
-    # compare_image(all_descriptors, labels, image)
-
-    for task in os.listdir(base_path):
-        print(f"{task}------------------------------------------")
-        task_folder = os.path.join(base_path,task)
-        for im_file in os.listdir(task_folder):
-            if not im_file.__contains__(".png"):
-                continue
-            image = os.path.join(task_folder,im_file)
-            print(f"{os.path.join(task,im_file)}: ",end=" ")
-            for ycb_object in descriptor_dict:
-                [present, _, sim] = object_in_scene(image, ycb_object["descriptors"], threshold=0.46)
-                if present:
-                    print(f"{ycb_object['object']} {sim}", end=" ")
-                    continue
-                if task == ycb_object['object']:
-                    print(f"--- {task} {sim}", end=" ")
-            print()
+    compare(base_path)
+    # task = os.path.join(base_path, "BananaInBowl-v0")
+    # image = os.path.join(task,"1688229886422_1.png")
+    # all_descriptors = pkl.load(open(f"training_data/descriptors.pkl", "rb"))
+    # labels = pkl.load(open(f"training_data/descriptor_labels.pkl", "rb"))
+    # descriptor_dict = reformat_descriptors(all_descriptors,labels)
+    # # for ycb_object in descriptor_dict:
+    # #     [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
+    # #     print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
+    # # compare_image(all_descriptors, labels, image)
+    #
+    # for task in os.listdir(base_path):
+    #     print(f"{task}------------------------------------------")
+    #     task_folder = os.path.join(base_path,task)
+    #     for im_file in os.listdir(task_folder):
+    #         if not im_file.__contains__(".png"):
+    #             continue
+    #         image = os.path.join(task_folder,im_file)
+    #         print(f"{os.path.join(task,im_file)}: ",end=" ")
+    #         for ycb_object in descriptor_dict:
+    #             [present, _, sim] = object_in_scene(image, ycb_object["descriptors"], threshold=0.56)
+    #             if present:
+    #                 print(f"{ycb_object['object']} {sim}", end=" ")
+    #                 continue
+    #             if task == ycb_object['object']:
+    #                 print(f"--- {task} {sim}", end=" ")
+    #         print()

@@ -57,7 +57,9 @@ if __name__ == '__main__':
     # in all_descriptors all the descriptors for the objects will be safed
     all_descriptors = torch.tensor([], device= device)
     descriptor_labels = []
-    for task in os.listdir(training_data_path):
+    tasks = os.listdir(training_data_path)
+    tasks.sort()
+    for task in tasks:
         task_folder = os.path.join(training_data_path, task)
         labels = None
         with open(os.path.join(task_folder, "labels.yml"), "r") as label_file:

@@ -103,5 +103,5 @@ def swap_background(background_name: str):
 
 if __name__ == "__main__":
     create_data_set(custom_single_tasks,
-                    num_samples_per_task=3
+                    num_samples_per_task=15
                     )
