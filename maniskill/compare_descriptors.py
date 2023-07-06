@@ -1,0 +1,127 @@
+import os
+
+import torch
+import pickle as pkl
+from typing import List
+
+from matplotlib import pyplot as plt
+
+from dino.extractor import ViTExtractor
+from maniskill.extract_descriptors import get_descriptors, chunk_cosine_sim
+from maniskill.task_classifier import *
+
+stride = 2
+patch_size = 8
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+extractor = ViTExtractor(stride=stride)
+
+def object_in_scene(image_path: str, object_descriptors: torch.Tensor, threshold: float = 0.56):
+    object_descriptors = torch.transpose(object_descriptors, 0, 2)
+    image_descriptors = get_descriptors(image_path)
+    # computer similarities
+    similarities = chunk_cosine_sim(object_descriptors, image_descriptors)
+    sims, idxs = torch.topk(similarities.flatten(), 1)
+    # num_patches = extractor.num_patches
+    num_patches = (61, 61)
+    # get the most similar patch
+    sim, idx = sims[0], idxs[0]
+    if sim < threshold:
+        # object not in scene
+        return [False, [], sim]
+    idx = idx % (num_patches[0] * num_patches[1])
+    y_desc, x_desc = idx // num_patches[1], idx % num_patches[1]
+    coordinates = [((x_desc - 1) * stride + stride + patch_size // 2 - .5).item(),
+                   ((y_desc - 1) * stride + stride + patch_size // 2 - .5).item()]
+    return [True, coordinates, sim]
+
+
+def compare_image(descriptors: torch.Tensor, descriptor_labels: List[str], image_path: str):
+    descriptors = torch.transpose(descriptors,0,2)
+    descr_b = get_descriptors(image_path)
+    similarities = chunk_cosine_sim(descriptors, descr_b)
+    sims, idxs = torch.topk(similarities.flatten(), 4)
+    num_patches = extractor.num_patches
+    fig, ax = plt.subplots()
+    for idx in idxs:
+        descr_idx = idx // (num_patches[0] * num_patches[1])
+        idx = idx % (num_patches[0] * num_patches[1])
+        print(f"{descriptor_labels[descr_idx]} {similarities[0,0,descr_idx,idx]}")
+        y_desc, x_desc = idx // num_patches[1], idx % num_patches[1]
+        center = ((x_desc - 1) * stride + stride + patch_size // 2 - .5,
+                  (y_desc - 1) * stride + stride + patch_size // 2 - .5)
+        patch = plt.Circle(center, 2, color=(1, 0, 0, 0.75))
+        ax.imshow(extractor.preprocess(image_path)[1])
+        ax.add_patch(patch)
+    plt.draw()
+    plt.show()
+
+
+def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
+    objects = []
+    idx = 0
+    object_label = labels[0]
+    for i in range(len(labels)):
+        if not labels[i] == object_label:
+            objects.append({
+                "object": object_label,
+                "descriptors": descriptors[idx:i]
+            })
+            idx = i
+            object_label = labels[idx]
+    objects.append({
+        "object": object_label,
+        "descriptors": descriptors[idx:]
+    })
+    return objects
+
+
+def compare(img_path: str):
+    net = TaskClassifier(vit_stride=2)
+    [tensors, labels] = net.load_cache(img_path)
+    found = 0
+    wrong = 0
+    extra = 0
+    for tensor, label in zip(tensors,labels):
+        if not tensor[label*3] == 0.:
+            found += 1
+        else:
+            if torch.count_nonzero(tensor) > 0:
+                wrong += 1
+        if torch.count_nonzero(tensor) > 2:
+            extra += 1
+    print(f"Found {found} objects in the correct scene")
+    print(f"Found wrong objects in scene {wrong} times")
+    print(f"Found multiple objects in scene {extra} times")
+    print(f"total objects: {len(labels)}")
+
+
+
+if __name__ == '__main__':
+    base_path = "training_data/training_set"
+    compare(base_path)
+    # task = os.path.join(base_path, "BananaInBowl-v0")
+    # image = os.path.join(task,"1688229886422_1.png")
+    # all_descriptors = pkl.load(open(f"training_data/descriptors.pkl", "rb"))
+    # labels = pkl.load(open(f"training_data/descriptor_labels.pkl", "rb"))
+    # descriptor_dict = reformat_descriptors(all_descriptors,labels)
+    # # for ycb_object in descriptor_dict:
+    # #     [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
+    # #     print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
+    # # compare_image(all_descriptors, labels, image)
+    #
+    # for task in os.listdir(base_path):
+    #     print(f"{task}------------------------------------------")
+    #     task_folder = os.path.join(base_path,task)
+    #     for im_file in os.listdir(task_folder):
+    #         if not im_file.__contains__(".png"):
+    #             continue
+    #         image = os.path.join(task_folder,im_file)
+    #         print(f"{os.path.join(task,im_file)}: ",end=" ")
+    #         for ycb_object in descriptor_dict:
+    #             [present, _, sim] = object_in_scene(image, ycb_object["descriptors"], threshold=0.56)
+    #             if present:
+    #                 print(f"{ycb_object['object']} {sim}", end=" ")
+    #                 continue
+    #             if task == ycb_object['object']:
+    #                 print(f"--- {task} {sim}", end=" ")
+    #         print()

@@ -1,5 +1,6 @@
 import random
-
+import custom_tasks.multiple_object_tasks
+import custom_tasks.single_object_tasks
 import gym
 import mani_skill2.envs
 import matplotlib.pyplot as plt
@@ -20,6 +21,8 @@ cameras = ["base_camera", "hand_camera"]
 
 background_folder = f"data/background/"
 alternate_background_folder = f"data/bg_backup/"
+
+custom_single_tasks=["EatBanana-v0", "PickUpFork-v0", "ThrowBall-v0", "SpinBowl-v0"]
 
 default_background_name = "minimalistic_modern_bedroom.glb"
 # backgrounds = ["dinning_room.glb", "minimalistic_modern_bedroom.glb", "minimalistic_modern_office.glb", "vintage_living_room.glb", "small_modern_kitchen.glb", "charite_university_hospital_-_operating_room.glb"]
@@ -99,6 +102,6 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
-    create_data_set(["PickSingleYCB-v0"],
-                    num_samples_per_task=15,
-                    objects=["011_banana", "030_fork", "048_hammer", "055_baseball", "024_bowl"])
+    create_data_set(custom_single_tasks,
+                    num_samples_per_task=15
+                    )
