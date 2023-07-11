@@ -18,13 +18,13 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class TaskClassifier(nn.Module):
 
-    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None):
+    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: List[dict] =None):
         super().__init__()
         self.n_classes = n_classes
         self.extractor = ViTExtractor(stride=vit_stride)
         for param in self.extractor.model.parameters():
             param.requires_grad = False
-        self.obj_finder = ObjectLocator(self.extractor,threshold=threshold)
+        self.obj_finder = ObjectLocator(self.extractor,threshold=threshold, descriptors=descriptors)
         # create fc layer to get task
 
         #map from image pixels & depth to world space
@@ -98,30 +98,16 @@ class ObjectLocator:
 
     def __init__(self,
                  extractor: ViTExtractor,
-                 descriptor_file: str = "training_data/descriptors.pkl",
-                 descriptor_labels: str = "training_data/descriptor_labels.pkl",
+                 descriptor_labels: str = f"training_data/descriptor_data.pkl",
+                 descriptors: List[dict] = None,
                  threshold: List[float] = None):
-        objects = []
         self.extractor = extractor
-        idx = 0
-        all_descriptors = pkl.load(open(descriptor_file, "rb"))
-        labels = pkl.load(open(descriptor_labels, "rb"))
-        object_label = labels[0]
-        for i in range(len(labels)):
-            if not labels[i] == object_label:
-                objects.append({
-                    "object": object_label,
-                    "descriptors": torch.transpose(all_descriptors[idx:i], 0, 2)
-                })
-                idx = i
-                object_label = labels[idx]
-        objects.append({
-            "object": object_label,
-            "descriptors": torch.transpose(all_descriptors[idx:], 0, 2)
-        })
-        self.object_descriptors = objects
+        if descriptors is None:
+            self.object_descriptors = pkl.load(open(descriptor_labels, "rb"))
+        else:
+            self.object_descriptors = descriptors
         if threshold is None:
-            self.threshold = 0.55 * len(objects)
+            self.threshold = 0.55 * len(self.object_descriptors)
         else:
             self.threshold = threshold
 
@@ -130,7 +116,7 @@ class ObjectLocator:
 
     def forward(self, x: torch.Tensor):
         num_patches = [61,61]
-        if not self.extractor.num_patches == None:
+        if self.extractor.num_patches is not None:
             num_patches = self.extractor.num_patches
         with torch.inference_mode():
             obj_locations = torch.tensor([], device=device)

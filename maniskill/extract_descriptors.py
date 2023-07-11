@@ -37,9 +37,15 @@ def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 def get_descriptor_for_labeled(image_path: str, coordinates: str):
     x_int = int(coordinates.split(" ")[0].split(".")[0])
     y_int = int(coordinates.split(" ")[-1].split(".")[0])
+    tensor_path = f"{image_path.split('.')[0]}.pt"
     with torch.inference_mode():
-        descs = get_descriptors(image_path)
-        num_patches, load_size = extractor.num_patches, extractor.load_size
+        if os.path.exists(tensor_path):
+            descs = torch.load(tensor_path)
+            num_patches = (61,61)
+            load_size = (128,128)
+        else:
+            descs = get_descriptors(image_path)
+            num_patches, load_size = extractor.num_patches, extractor.load_size
         x_descr = int(num_patches[1] / load_size[1] * x_int)
         y_descr = int(num_patches[0] / load_size[0] * y_int)
         descriptor_idx = num_patches[1] * y_descr + x_descr
@@ -111,8 +117,16 @@ def extract_topk_descr(descr: List[dict], method: str, k: int = 5):
     return descr
 
 
+def get_similar(img_path: str, k: int = 5):
+    descriptors = extract_descriptors(tasks=os.listdir(img_path))
+    return extract_topk_descr(descriptors, "similar", k)
+
+
+def get_dissimilar(img_path: str, k: int = 5):
+    descriptors = extract_descriptors(tasks=os.listdir(img_path))
+    return extract_topk_descr(descriptors, "dissimilar", k)
+
+
 if __name__ == '__main__':
     training_data_path = f"training_data/training_set"
-    descriptors = extract_descriptors(tasks=os.listdir(training_data_path))
-    descriptors = extract_topk_descr(descriptors, "similar")
-    pkl.dump(descriptors, open(f"training_data/descriptor_data.pkl", "wb"))
+    pkl.dump(get_similar(training_data_path), open(f"training_data/descriptor_data.pkl", "wb"))

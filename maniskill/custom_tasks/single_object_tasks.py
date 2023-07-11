@@ -118,7 +118,7 @@ class ThrowHammer(SingleObjectTask):
             goal_thresh=0.025,
             **kwargs,
     ):
-        super().__init__("050_medium_clamp",
+        super().__init__("052_extra_large_clamp",
                          asset_root,
                          model_json,
                          obj_init_rot_z=obj_init_rot_z,

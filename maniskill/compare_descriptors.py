@@ -77,8 +77,8 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
     return objects
 
 
-def compare_single(img_src: str, task: str, custom_threshold:float = 0.55):
-    net = TaskClassifier(vit_stride=2)
+def compare_single(img_src: str, task: str, custom_threshold:float = 0.55, truth_descriptors=None):
+    net = TaskClassifier(vit_stride=2, descriptors=truth_descriptors)
     [class_mapping, dataset] = net.load_cache(img_src)
     data_loader = DataLoader(dataset=dataset, batch_size=64, shuffle=True)
     obj_finder = net.obj_finder
