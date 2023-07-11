@@ -3,20 +3,14 @@ import sys
 import os
 from typing import List
 import random
-from torchmetrics.functional import pairwise_manhattan_distance
-import numpy as np
 import torch.utils.data
 import yaml
-from dino.extractor import ViTExtractor
-from matplotlib import pyplot as plt
-from matplotlib import image as mpimg
 import torch
 import pickle as pkl
 
 stride = 2
 patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-extractor = ViTExtractor(stride=stride)
 
 def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """ Computes cosine similarity between all possible pairs in two sets of vectors.
@@ -43,20 +37,10 @@ def get_descriptor_for_labeled(image_path: str, coordinates: str):
             descs = torch.load(tensor_path)
             num_patches = (61,61)
             load_size = (128,128)
-        else:
-            descs = get_descriptors(image_path)
-            num_patches, load_size = extractor.num_patches, extractor.load_size
         x_descr = int(num_patches[1] / load_size[1] * x_int)
         y_descr = int(num_patches[0] / load_size[0] * y_int)
         descriptor_idx = num_patches[1] * y_descr + x_descr
-    return descs[:,:,int(descriptor_idx),:].unsqueeze(0)
-
-
-def get_descriptors(image_path: str):
-    with torch.inference_mode():
-        image_batch, image_pil = extractor.preprocess(image_path)
-        descs = extractor.extract_descriptors(image_batch.to(device))
-        return descs.detach()
+        return descs[:,:,int(descriptor_idx),:].unsqueeze(0)
 
 
 def read_points(task_folder: str):
@@ -79,7 +63,7 @@ def extract_descriptors(tasks: List[str], descriptor_amount: int = None):
     descriptors = []
     tasks.sort()
     for task in tasks:
-        task_folder = os.path.join(training_data_path, task)
+        task_folder = os.path.join(f"training_data/training_set", task)
         [files, points] = read_points(task_folder)
         current_descriptors = torch.tensor([], device=device)
         zipped = list(zip(files, points))

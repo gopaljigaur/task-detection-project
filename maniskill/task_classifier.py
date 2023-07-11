@@ -1,4 +1,5 @@
-from typing import List
+
+from typing import List, Callable
 
 import torch.nn as nn
 import torch.optim as optim
@@ -45,7 +46,7 @@ class TaskClassifier(nn.Module):
 
     def cached_forward(self, x: torch.Tensor):
         x = self.obj_finder(x)
-        x = x.detach().requires_grad_(True)
+        x = x.clone().detach().requires_grad_(True)
         # get prediction using a linear layer
         x = self.classifier(x)
         x = F.relu(x)
@@ -74,9 +75,12 @@ class TaskClassifier(nn.Module):
                 tensor = self.cache_object_output(tensor)
                 torch.save(tensor, f"{image.split('.')[0]}.pt")
 
-    def load_cache(self, image_base_path: str):
+    def load_cache(self, image_base_path: str, filter_fn: Callable[[str], bool] =None):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
-        return [dataset.class_to_idx, TensorDataSet(dataset.imgs)]
+        if filter is None:
+            return [dataset.class_to_idx, TensorDataSet(dataset.imgs)]
+        else:
+            return [dataset.class_to_idx, TensorDataSet(list(filter(filter_fn, dataset.imgs)))]
 
 def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """ Computes cosine similarity between all possible pairs in two sets of vectors.
@@ -107,7 +111,7 @@ class ObjectLocator:
         else:
             self.object_descriptors = descriptors
         if threshold is None:
-            self.threshold = 0.55 * len(self.object_descriptors)
+            self.threshold = [0.55] * len(self.object_descriptors)
         else:
             self.threshold = threshold
 
@@ -118,8 +122,8 @@ class ObjectLocator:
         num_patches = [61,61]
         if self.extractor.num_patches is not None:
             num_patches = self.extractor.num_patches
+        obj_locations = torch.tensor([], device=device)
         with torch.inference_mode():
-            obj_locations = torch.tensor([], device=device)
             for threshold, obj in zip(self.threshold, self.object_descriptors):
                 obj_descr = obj["descriptors"]
                 similarities = chunk_cosine_sim(obj_descr, x)
