@@ -1,3 +1,5 @@
+from typing import List
+
 import torch.nn as nn
 import torch.optim as optim
 import torch
@@ -9,20 +11,24 @@ from dino.extractor import ViTExtractor
 import torch.nn.functional as F
 import pickle as pkl
 
+from maniskill.custom_tasks.helpers.TensorDataSet import TensorDataSet
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class TaskClassifier(nn.Module):
 
-    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 4):
+    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None):
         super().__init__()
         self.n_classes = n_classes
         self.extractor = ViTExtractor(stride=vit_stride)
         for param in self.extractor.model.parameters():
             param.requires_grad = False
-        self.obj_finder = ObjectLocator(self.extractor)
+        self.obj_finder = ObjectLocator(self.extractor,threshold=threshold)
         # create fc layer to get task
+
+        #map from image pixels & depth to world space
+
         self.classifier = nn.Linear(self.n_classes * 3, self.n_classes).cuda()
 
     def forward(self, x: torch.Tensor):
@@ -38,8 +44,9 @@ class TaskClassifier(nn.Module):
         return F.softmax(copied_tensor, dim=1)
 
     def cached_forward(self, x: torch.Tensor):
-        # map descriptors to object locations
         x = self.obj_finder(x)
+        x = x.detach().requires_grad_(True)
+        # get prediction using a linear layer
         x = self.classifier(x)
         x = F.relu(x)
         return F.softmax(x, dim=1)
@@ -48,10 +55,8 @@ class TaskClassifier(nn.Module):
         # extract descriptors from image
         with torch.inference_mode():
             x = self.extractor.extract_descriptors(x)
-        # get prediction using a linear layer
-        copied_tensor = x.clone().detach().requires_grad_(True)
-        return copied_tensor
-
+        # map descriptors to object locations
+        return x.clone().detach().requires_grad_(True)
 
     def convert_to_image(self, image_path: str):
         return self.extractor.preprocess(image_path)[1]
@@ -61,27 +66,17 @@ class TaskClassifier(nn.Module):
 
     def preprocess(self, image_base_path:str):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
-        tensors = []
-        labels = []
         for [image, label] in dataset.imgs:
             with open(image, "rb") as f:
                 img = Image.open(f).convert("RGB")
                 transformer = transforms.ToTensor()
                 tensor = transformer(img).unsqueeze(0).to(device)
                 tensor = self.cache_object_output(tensor)
-                tensors.append(tensor)
-                labels.append(label)
                 torch.save(tensor, f"{image.split('.')[0]}.pt")
 
     def load_cache(self, image_base_path: str):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
-        tensors = []
-        labels = []
-        for [image, label] in dataset.imgs:
-            tensor = torch.load(f"{image.split('.')[0]}.pt")
-            tensors.append(tensor.squeeze(0))
-            labels.append(label)
-        return [tensors, labels]
+        return [dataset.class_to_idx, TensorDataSet(dataset.imgs)]
 
 def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """ Computes cosine similarity between all possible pairs in two sets of vectors.
@@ -105,10 +100,9 @@ class ObjectLocator:
                  extractor: ViTExtractor,
                  descriptor_file: str = "training_data/descriptors.pkl",
                  descriptor_labels: str = "training_data/descriptor_labels.pkl",
-                 threshold: float = 0.56):
+                 threshold: List[float] = None):
         objects = []
         self.extractor = extractor
-        self.threshold = threshold
         idx = 0
         all_descriptors = pkl.load(open(descriptor_file, "rb"))
         labels = pkl.load(open(descriptor_labels, "rb"))
@@ -126,14 +120,21 @@ class ObjectLocator:
             "descriptors": torch.transpose(all_descriptors[idx:], 0, 2)
         })
         self.object_descriptors = objects
+        if threshold is None:
+            self.threshold = 0.55 * len(objects)
+        else:
+            self.threshold = threshold
 
     def __call__(self, x: torch.Tensor):
         return self.forward(x)
 
     def forward(self, x: torch.Tensor):
+        num_patches = [61,61]
+        if not self.extractor.num_patches == None:
+            num_patches = self.extractor.num_patches
         with torch.inference_mode():
             obj_locations = torch.tensor([], device=device)
-            for obj in self.object_descriptors:
+            for threshold, obj in zip(self.threshold, self.object_descriptors):
                 obj_descr = obj["descriptors"]
                 similarities = chunk_cosine_sim(obj_descr, x)
                 # find best matching position
@@ -143,13 +144,14 @@ class ObjectLocator:
                 #     # object not currently present in scene
                 #     obj_locations = torch.cat((obj_locations, torch.tensor([-99, -99, -99], device=device)))
                 #     continue
-                patch_idx = idxs % (self.extractor.num_patches[0] * self.extractor.num_patches[1])
-                y_desc, x_desc = patch_idx // self.extractor.num_patches[1], patch_idx % self.extractor.num_patches[1]
+                patch_idx = idxs % (num_patches[0] * num_patches[1])
+                y_desc, x_desc = patch_idx // num_patches[1], patch_idx % num_patches[1]
                 coordinates = torch.cat(((x_desc - 1) * self.extractor.stride[1] + self.extractor.stride[1] + self.extractor.model.patch_embed.patch_size // 2 - .5,
                                (y_desc - 1) * self.extractor.stride[0] + self.extractor.stride[0] + self.extractor.model.patch_embed.patch_size // 2 - .5,
                                torch.zeros((idxs.shape[0],1), device=device)),1)
                 # obj_locations = torch.cat((obj_locations, torch.tensor(coordinates, device=device)))
                 not_present = torch.tensor([0, 0, 0], device=device)
-                obj_locations = torch.cat((obj_locations, torch.where(sims > self.threshold, coordinates, not_present)),dim=1)
-            obj_locations.requires_grad=True
-            return obj_locations
+                current_object_locations = torch.where(sims > threshold, coordinates, not_present)
+                obj_locations = torch.cat((obj_locations, current_object_locations),dim=1)
+            # obj_locations.requires_grad=True
+        return obj_locations

@@ -1,11 +1,13 @@
 import os
 
+import numpy as np
 import torch
 import pickle as pkl
 from typing import List
 
 from matplotlib import pyplot as plt
-
+from torch.utils.data import DataLoader
+from torchvision.transforms import ToTensor
 from dino.extractor import ViTExtractor
 from maniskill.extract_descriptors import get_descriptors, chunk_cosine_sim
 from maniskill.task_classifier import *
@@ -75,53 +77,40 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
     return objects
 
 
-def compare(img_path: str):
+def compare_single(img_src: str, task: str, custom_threshold:float = 0.55):
     net = TaskClassifier(vit_stride=2)
-    [tensors, labels] = net.load_cache(img_path)
-    found = 0
-    wrong = 0
-    extra = 0
-    for tensor, label in zip(tensors,labels):
-        if not tensor[label*3] == 0.:
-            found += 1
-        else:
-            if torch.count_nonzero(tensor) > 0:
-                wrong += 1
-        if torch.count_nonzero(tensor) > 2:
-            extra += 1
-    print(f"Found {found} objects in the correct scene")
-    print(f"Found wrong objects in scene {wrong} times")
-    print(f"Found multiple objects in scene {extra} times")
-    print(f"total objects: {len(labels)}")
-
+    [class_mapping, dataset] = net.load_cache(img_src)
+    data_loader = DataLoader(dataset=dataset, batch_size=64, shuffle=True)
+    obj_finder = net.obj_finder
+    threshold = [0.55] * len(class_mapping)
+    threshold[class_mapping[task]] = custom_threshold
+    obj_finder.threshold = threshold
+    true_positive = 0
+    false_positive = 0
+    true_negative = 0
+    false_negative = 0
+    multiple = 0
+    total = len(dataset.img_tuples)
+    for [tensors, labels] in data_loader:
+        tensor = obj_finder(tensors)
+        for i in range(tensor.shape[0]):
+            if labels[i] == class_mapping[task]:
+                if not tensor[i, class_mapping[task]*3] == 0.:
+                    true_positive += 1
+                else:
+                    false_negative += 1
+            else:
+                if not tensor[i, class_mapping[task]*3] == 0.:
+                    false_positive += 1
+                else:
+                    true_negative += 1
+            if torch.count_nonzero(tensor[i]) > 2:
+                multiple += 1
+    print(f"TP: {true_positive}, FN: {false_negative}, FP: {false_positive}, TN: {true_negative}, multiple: {multiple}, total:{total}")
+    return [true_positive, false_negative, false_positive, true_negative, multiple, total]
 
 
 if __name__ == '__main__':
+    custom_single_tasks=["PickupDrill-v0", "PickUpBlock-v0", "FindClamp-v0", "StoreScrewdriver-v0","Mark-v0"]
     base_path = "training_data/training_set"
-    compare(base_path)
-    # task = os.path.join(base_path, "BananaInBowl-v0")
-    # image = os.path.join(task,"1688229886422_1.png")
-    # all_descriptors = pkl.load(open(f"training_data/descriptors.pkl", "rb"))
-    # labels = pkl.load(open(f"training_data/descriptor_labels.pkl", "rb"))
-    # descriptor_dict = reformat_descriptors(all_descriptors,labels)
-    # # for ycb_object in descriptor_dict:
-    # #     [is_present, coords, sim] = object_in_scene(image, ycb_object["descriptors"])
-    # #     print(f"{ycb_object['object']} {'' if is_present else 'not'} present {f'at {coords}' if is_present else ''}, highest: {sim}")
-    # # compare_image(all_descriptors, labels, image)
-    #
-    # for task in os.listdir(base_path):
-    #     print(f"{task}------------------------------------------")
-    #     task_folder = os.path.join(base_path,task)
-    #     for im_file in os.listdir(task_folder):
-    #         if not im_file.__contains__(".png"):
-    #             continue
-    #         image = os.path.join(task_folder,im_file)
-    #         print(f"{os.path.join(task,im_file)}: ",end=" ")
-    #         for ycb_object in descriptor_dict:
-    #             [present, _, sim] = object_in_scene(image, ycb_object["descriptors"], threshold=0.56)
-    #             if present:
-    #                 print(f"{ycb_object['object']} {sim}", end=" ")
-    #                 continue
-    #             if task == ycb_object['object']:
-    #                 print(f"--- {task} {sim}", end=" ")
-    #         print()
+    compare_single(base_path, custom_single_tasks[0], 0.60)
