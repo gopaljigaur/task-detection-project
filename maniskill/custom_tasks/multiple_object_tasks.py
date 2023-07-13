@@ -8,10 +8,9 @@ from sapien.core import Pose
 from transforms3d.euler import euler2quat
 from transforms3d.quaternions import axangle2quat, qmult
 
+multiobject_tasks = ["DrillBlock-v0", "MarkBlock-v0", "ReleaseBlock-v0", "CollectTools-v0"]
 
-@register_env("BananaInBowl-v0", max_episode_steps=200)
-class BananaBowl(PickClutterEnv):
-    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/banana_bowl/episode.json.gz"
+class MultipleObjectTask(PickClutterEnv):
     # DEFAULT_EPISODE_JSON = "{ASSET_DIR}/pick_clutter/ycb_train_5k.json.gz"
     DEFAULT_ASSET_ROOT = PickSingleYCBEnv.DEFAULT_ASSET_ROOT
     DEFAULT_MODEL_JSON = PickSingleYCBEnv.DEFAULT_MODEL_JSON
@@ -37,4 +36,74 @@ class BananaBowl(PickClutterEnv):
         obj.name = model_id
         obj.set_damping(0.1, 0.1)
         return obj
+
+
+@register_env("DrillBlock-v0", max_episode_steps=200)
+class CleanMug(MultipleObjectTask):
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/drill_block/episode.json.gz"
+
+    def __init__(
+            self,
+            episode_json: str = None,
+            asset_root: str = None,
+            model_json: str = None,
+            **kwargs,
+    ):
+        super().__init__(episode_json, asset_root, model_json, **kwargs)
+
+
+@register_env("ReleaseBlock-v0", max_episode_steps=200)
+class CleanMug(MultipleObjectTask):
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/release_block/episode.json.gz"
+
+    def __init__(
+            self,
+            episode_json: str = None,
+            asset_root: str = None,
+            model_json: str = None,
+            **kwargs,
+    ):
+        super().__init__(episode_json, asset_root, model_json, **kwargs)
+
+
+@register_env("FastenBlock-v0", max_episode_steps=200)
+class CleanMug(MultipleObjectTask):
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/release_block/episode.json.gz"
+
+    def __init__(
+            self,
+            episode_json: str = None,
+            asset_root: str = None,
+            model_json: str = None,
+            **kwargs,
+    ):
+        super().__init__(episode_json, asset_root, model_json, **kwargs)
+
+
+@register_env("CollectTools-v0", max_episode_steps=200)
+class CleanMug(MultipleObjectTask):
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/release_block/episode.json.gz"
+
+    def __init__(
+            self,
+            episode_json: str = None,
+            asset_root: str = None,
+            model_json: str = None,
+            **kwargs,
+    ):
+        super().__init__(episode_json, asset_root, model_json, **kwargs)
+
+
+@register_env("MarkBlock-v0", max_episode_steps=200)
+class CleanMug(MultipleObjectTask):
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/mark_block/episode.json.gz"
+
+    def __init__(
+            self,
+            episode_json: str = None,
+            asset_root: str = None,
+            model_json: str = None,
+            **kwargs,
+    ):
+        super().__init__(episode_json, asset_root, model_json, **kwargs)
 

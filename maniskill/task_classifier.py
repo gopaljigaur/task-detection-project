@@ -1,3 +1,6 @@
+
+from typing import List, Callable, Union
+
 import torch.nn as nn
 import torch.optim as optim
 import torch
@@ -9,20 +12,24 @@ from dino.extractor import ViTExtractor
 import torch.nn.functional as F
 import pickle as pkl
 
+from maniskill.custom_tasks.helpers.TensorDataSet import TensorDataSet
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class TaskClassifier(nn.Module):
 
-    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 4):
+    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: List[dict] =None):
         super().__init__()
         self.n_classes = n_classes
         self.extractor = ViTExtractor(stride=vit_stride)
         for param in self.extractor.model.parameters():
             param.requires_grad = False
-        self.obj_finder = ObjectLocator(self.extractor)
+        self.obj_finder = ObjectLocator(self.extractor,threshold=threshold, descriptors=descriptors)
         # create fc layer to get task
+
+        #map from image pixels & depth to world space
+
         self.classifier = nn.Linear(self.n_classes * 3, self.n_classes).cuda()
 
     def forward(self, x: torch.Tensor):
@@ -38,8 +45,9 @@ class TaskClassifier(nn.Module):
         return F.softmax(copied_tensor, dim=1)
 
     def cached_forward(self, x: torch.Tensor):
-        # map descriptors to object locations
         x = self.obj_finder(x)
+        x = x.clone().detach().requires_grad_(True)
+        # get prediction using a linear layer
         x = self.classifier(x)
         x = F.relu(x)
         return F.softmax(x, dim=1)
@@ -48,10 +56,8 @@ class TaskClassifier(nn.Module):
         # extract descriptors from image
         with torch.inference_mode():
             x = self.extractor.extract_descriptors(x)
-        # get prediction using a linear layer
-        copied_tensor = x.clone().detach().requires_grad_(True)
-        return copied_tensor
-
+        # map descriptors to object locations
+        return x.clone().detach().requires_grad_(True)
 
     def convert_to_image(self, image_path: str):
         return self.extractor.preprocess(image_path)[1]
@@ -61,27 +67,20 @@ class TaskClassifier(nn.Module):
 
     def preprocess(self, image_base_path:str):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
-        tensors = []
-        labels = []
         for [image, label] in dataset.imgs:
             with open(image, "rb") as f:
                 img = Image.open(f).convert("RGB")
                 transformer = transforms.ToTensor()
                 tensor = transformer(img).unsqueeze(0).to(device)
                 tensor = self.cache_object_output(tensor)
-                tensors.append(tensor)
-                labels.append(label)
                 torch.save(tensor, f"{image.split('.')[0]}.pt")
 
-    def load_cache(self, image_base_path: str):
+    def load_cache(self, image_base_path: str, filter_fn: Callable[[str], bool] =None):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
-        tensors = []
-        labels = []
-        for [image, label] in dataset.imgs:
-            tensor = torch.load(f"{image.split('.')[0]}.pt")
-            tensors.append(tensor.squeeze(0))
-            labels.append(label)
-        return [tensors, labels]
+        if filter is None:
+            return [dataset.class_to_idx, TensorDataSet(dataset.imgs)]
+        else:
+            return [dataset.class_to_idx, TensorDataSet(list(filter(filter_fn, dataset.imgs)))]
 
 def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """ Computes cosine similarity between all possible pairs in two sets of vectors.
@@ -103,53 +102,100 @@ class ObjectLocator:
 
     def __init__(self,
                  extractor: ViTExtractor,
-                 descriptor_file: str = "training_data/descriptors.pkl",
-                 descriptor_labels: str = "training_data/descriptor_labels.pkl",
-                 threshold: float = 0.56):
-        objects = []
+                 descriptor_labels: str = f"training_data/descriptor_data.pkl",
+                 descriptors: List[dict] = None,
+                 threshold: List[float] = None,
+                 location_method: str = None,
+                 aggregation_percentage: float = None):
         self.extractor = extractor
-        self.threshold = threshold
-        idx = 0
-        all_descriptors = pkl.load(open(descriptor_file, "rb"))
-        labels = pkl.load(open(descriptor_labels, "rb"))
-        object_label = labels[0]
-        for i in range(len(labels)):
-            if not labels[i] == object_label:
-                objects.append({
-                    "object": object_label,
-                    "descriptors": torch.transpose(all_descriptors[idx:i], 0, 2)
-                })
-                idx = i
-                object_label = labels[idx]
-        objects.append({
-            "object": object_label,
-            "descriptors": torch.transpose(all_descriptors[idx:], 0, 2)
-        })
-        self.object_descriptors = objects
+        if descriptors is None:
+            self.object_descriptors = pkl.load(open(descriptor_labels, "rb"))
+        else:
+            self.object_descriptors = descriptors
+        if threshold is None:
+            self.threshold = [0.55] * len(self.object_descriptors)
+        else:
+            self.threshold = threshold
+        if location_method is None:
+            self.location_method = self._aggregate
+            if aggregation_percentage is None:
+                self.aggregation_percentage = 0.6
+            else:
+                self.aggregation_percentage = aggregation_percentage
+        else:
+            if location_method =="find_one":
+                self.location_method = self._find_one
+
+
 
     def __call__(self, x: torch.Tensor):
         return self.forward(x)
 
+
+    def _aggregate(self, x: torch.Tensor, object_descriptors: torch.Tensor, threshold: float):
+        num_patches = [61,61]
+        object_locations = []
+        similarities = chunk_cosine_sim(object_descriptors, x)
+        sims, idxs = torch.topk(similarities, 1)
+        found_object = sims > threshold
+        not_found = torch.tensor([0, 0, 0], device=device)
+        found_amount_mask = torch.sum(found_object, dim=2).squeeze(1) >= object_descriptors.shape[2] * self.aggregation_percentage
+        for i in range(x.shape[0]):
+            if not found_amount_mask[i]:
+                object_locations.append(not_found)
+            else:
+                patch_idxs = idxs[i, found_object[i]].unsqueeze(1)
+                coordinates = self._extract_coordinates_from_patch(patch_idxs, num_patches, self.extractor.stride, self.extractor.model.patch_embed.patch_size)
+                object_location = torch.mean(coordinates, dim=0)
+                object_locations.append(object_location)
+        return torch.stack(object_locations)
+
+
+    def _find_one(self, x: torch.Tensor, object_descriptors: torch.Tensor, threshold: float):
+        num_patches = [61,61]
+        similarities = chunk_cosine_sim(object_descriptors, x)
+        # find best matching position
+        sims, idxs = torch.topk(similarities.flatten(1), 1)
+        sim, idx = sims[0], idxs[0]
+        # if sim < self.threshold:
+        #     # object not currently present in scene
+        #     obj_locations = torch.cat((obj_locations, torch.tensor([-99, -99, -99], device=device)))
+        #     continue
+        patch_idx = idxs % (num_patches[0] * num_patches[1])
+        # y_desc, x_desc = patch_idx // num_patches[1], patch_idx % num_patches[1]
+        # coordinates = torch.cat(((x_desc - 1) * self.extractor.stride[1] + self.extractor.stride[
+        #     1] + self.extractor.model.patch_embed.patch_size // 2 - .5,
+        #                          (y_desc - 1) * self.extractor.stride[0] + self.extractor.stride[
+        #                              0] + self.extractor.model.patch_embed.patch_size // 2 - .5,
+        #                          torch.zeros((idxs.shape[0], 1), device=device)), 1)
+        coordinates = self._extract_coordinates_from_patch(patch_idx, num_patches, self.extractor.stride, self.extractor.model.patch_embed.patch_size)
+        # obj_locations = torch.cat((obj_locations, torch.tensor(coordinates, device=device)))
+        not_present = torch.tensor([0, 0, 0], device=device)
+        return torch.where(sims > threshold, coordinates, not_present)
+
+    def _extract_coordinates_from_patch(self, patch_idx: Union[torch.Tensor, int], num_patches: [int, int], stride: [int,int], patch_size: [int,int]):
+        amount = 1
+        if torch.is_tensor(patch_idx):
+            amount = patch_idx.shape[0]
+        y_desc, x_desc = patch_idx // num_patches[1], patch_idx % num_patches[1]
+        coordinates = torch.cat(((x_desc - 1) * stride[1] + stride[
+            1] + patch_size // 2 - .5,
+                                 (y_desc - 1) * stride[0] + stride[
+                                     0] + patch_size // 2 - .5,
+                                 torch.zeros((amount, 1), device=device)), 1)
+        return coordinates
+
+
     def forward(self, x: torch.Tensor):
+        num_patches = [61,61]
+        if self.extractor.num_patches is not None:
+            num_patches = self.extractor.num_patches
+        obj_locations = torch.tensor([], device=device)
         with torch.inference_mode():
-            obj_locations = torch.tensor([], device=device)
-            for obj in self.object_descriptors:
+            for threshold, obj in zip(self.threshold, self.object_descriptors):
                 obj_descr = obj["descriptors"]
-                similarities = chunk_cosine_sim(obj_descr, x)
-                # find best matching position
-                sims, idxs = torch.topk(similarities.flatten(1), 1)
-                sim, idx = sims[0], idxs[0]
-                # if sim < self.threshold:
-                #     # object not currently present in scene
-                #     obj_locations = torch.cat((obj_locations, torch.tensor([-99, -99, -99], device=device)))
-                #     continue
-                patch_idx = idxs % (self.extractor.num_patches[0] * self.extractor.num_patches[1])
-                y_desc, x_desc = patch_idx // self.extractor.num_patches[1], patch_idx % self.extractor.num_patches[1]
-                coordinates = torch.cat(((x_desc - 1) * self.extractor.stride[1] + self.extractor.stride[1] + self.extractor.model.patch_embed.patch_size // 2 - .5,
-                               (y_desc - 1) * self.extractor.stride[0] + self.extractor.stride[0] + self.extractor.model.patch_embed.patch_size // 2 - .5,
-                               torch.zeros((idxs.shape[0],1), device=device)),1)
-                # obj_locations = torch.cat((obj_locations, torch.tensor(coordinates, device=device)))
-                not_present = torch.tensor([0, 0, 0], device=device)
-                obj_locations = torch.cat((obj_locations, torch.where(sims > self.threshold, coordinates, not_present)),dim=1)
-            obj_locations.requires_grad=True
-            return obj_locations
+                obj_locations = torch.cat((obj_locations, self.location_method(x, obj_descr, threshold)), dim=1)
+            # obj_locations.requires_grad=True
+        return obj_locations
+
+
