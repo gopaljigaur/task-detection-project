@@ -22,7 +22,7 @@ cameras = ["base_camera", "hand_camera"]
 background_folder = f"data/background/"
 alternate_background_folder = f"data/bg_backup/"
 
-custom_single_tasks=["PickupDrill-v0", "PickUpBlock-v0", "FindClamp-v0", "StoreScrewdriver-v0", "Mark-v0"]
+custom_single_tasks=["PickupDrill-v0", "PickCube-v0", "FindClamp-v0", "StoreWrench-v0", "Hammer-v0"]
 
 default_background_name = "minimalistic_modern_bedroom.glb"
 # backgrounds = ["dinning_room.glb", "minimalistic_modern_bedroom.glb", "minimalistic_modern_office.glb", "vintage_living_room.glb", "small_modern_kitchen.glb", "charite_university_hospital_-_operating_room.glb"]
@@ -34,7 +34,8 @@ if os.path.exists("data/bg_backup"):
 def create_data_set(tasks: List[str],
                     num_samples_per_task: int = 20,
                     save_path: str = "training_data/training_set",
-                    objects: List[str] = None):
+                    objects: List[str] = None,
+                    camera_cfg = None):
     label_dict = {}
     if not os.path.isdir("training_data"):
         os.mkdir("training_data")
@@ -51,7 +52,8 @@ def create_data_set(tasks: List[str],
                 create_data(task,
                             save_path=path,
                             background_name=background,
-                            num_samples=num_samples_per_task)
+                            num_samples=num_samples_per_task,
+                            camera_cfg=camera_cfg)
             else:
                 ## only use single object of list
                 for obj in objects:
@@ -60,14 +62,16 @@ def create_data_set(tasks: List[str],
                                 save_path=path,
                                 background_name=background,
                                 num_samples=num_samples_per_task,
-                                objects=[obj])
+                                objects=[obj],
+                                camera_cfg=camera_cfg)
 
 
 def create_data(task_name: str,
                 save_path: str,
                 background_name: str = "",
                 num_samples: int = 100,
-                objects: List[str] = None):
+                objects: List[str] = None,
+                camera_cfg =None):
     bg_name = "minimal_bedroom"
     if background_name == "":
         bg_name = None
@@ -75,9 +79,9 @@ def create_data(task_name: str,
         swap_background(background_name)
     # env = gym.make(task_name, obs_mode="rgbd", control_mode="pd_joint_delta_pos", bg_name=bg_name)
     if objects is None:
-        env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name)
+        env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name, camera_cfgs=camera_cfg)
     else:
-        env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name, model_ids=objects)
+        env = gym.make(task_name, obs_mode="rgbd", bg_name=bg_name, model_ids=objects, camera_cfgs=camera_cfg)
     # check if folders for saving are created
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
@@ -102,6 +106,7 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
+    camera_cfg={"height":256, "width":256}
     create_data_set(custom_single_tasks,
-                    num_samples_per_task=5
-                    )
+                    num_samples_per_task=5,
+                    camera_cfg=camera_cfg)

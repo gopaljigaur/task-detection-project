@@ -97,7 +97,7 @@ class PickUpFork(SingleObjectTask):
             goal_thresh=0.025,
             **kwargs,
     ):
-        super().__init__("036_wood_block",
+        super().__init__("070-a_colored_wood_blocks",
                          asset_root,
                          model_json,
                          obj_init_rot_z=obj_init_rot_z,
@@ -128,7 +128,7 @@ class ThrowHammer(SingleObjectTask):
                          )
 
 
-@register_env("StoreScrewdriver-v0", max_episode_steps=200)
+@register_env("StoreWrench-v0", max_episode_steps=200)
 class ThrowBall(SingleObjectTask):
     def __init__(
             self,
@@ -139,7 +139,7 @@ class ThrowBall(SingleObjectTask):
             goal_thresh=0.025,
             **kwargs,
     ):
-        super().__init__("044_flat_screwdriver",
+        super().__init__("042_adjustable_wrench",
                          asset_root,
                          model_json,
                          obj_init_rot_z=obj_init_rot_z,
@@ -149,7 +149,7 @@ class ThrowBall(SingleObjectTask):
                          )
 
 
-@register_env("Mark-v0", max_episode_steps=200)
+@register_env("Hammer-v0", max_episode_steps=200)
 class SpinBowl(SingleObjectTask):
     def __init__(
             self,
@@ -160,7 +160,7 @@ class SpinBowl(SingleObjectTask):
             goal_thresh=0.025,
             **kwargs,
     ):
-        super().__init__("040_large_marker",
+        super().__init__("048_hammer",
                          asset_root,
                          model_json,
                          obj_init_rot_z=obj_init_rot_z,

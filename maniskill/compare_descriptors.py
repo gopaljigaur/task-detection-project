@@ -15,7 +15,7 @@ from maniskill.extract_descriptors import chunk_cosine_sim, get_similar, get_dis
 from maniskill.task_classifier import *
 
 custom_single_tasks = ["PickupDrill-v0", "PickUpBlock-v0", "FindClamp-v0", "StoreScrewdriver-v0", "Mark-v0"]
-stride = 2
+stride = 4
 patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -49,7 +49,7 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
 def compare_single(img_src: str, task: str, custom_threshold: float = 0.55, truth_descriptors=None, filter_fn: Callable[[str], bool] = None):
     net = TaskClassifier(vit_stride=2, descriptors=truth_descriptors)
     [class_mapping, dataset] = net.load_cache(img_src, filter_fn=filter_fn)
-    data_loader = DataLoader(dataset=dataset, batch_size=64, shuffle=True)
+    data_loader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
     obj_finder = net.obj_finder
     threshold = [0.55] * len(class_mapping)
     threshold[class_mapping[task]] = custom_threshold
@@ -61,7 +61,7 @@ def compare_single(img_src: str, task: str, custom_threshold: float = 0.55, trut
     multiple = 0
     total = len(dataset.img_tuples)
     for [tensors, labels] in data_loader:
-        tensor = obj_finder(tensors)
+        tensor = obj_finder(tensors).detach()
         for i in range(tensor.shape[0]):
             if labels[i] == class_mapping[task]:
                 if not tensor[i, class_mapping[task]*3] == 0.:
@@ -96,10 +96,14 @@ def f1(precision, recall):
 
 def try_configurations(filter_fn=None):
     base_path = "training_data/training_set"
-    thresholds = [thr / 100 for thr in range(53, 64, 1)]
+    thresholds = [thr / 100 for thr in range(0, 60, 5)]
     results = {}
-    for task in custom_single_tasks[4:]:
+    for task in custom_single_tasks[:]:
         print(f"{task} ", end="")
+        similar_desc=[]
+        dissimilar_desc=[]
+        all_desc=[]
+        torch.cuda.empty_cache()
         results[task] = {}
         for threshold in thresholds:
             similar_desc = get_similar(base_path, k=5)
@@ -150,8 +154,5 @@ def combine_results():
 
 if __name__ == '__main__':
     # try_configurations(lambda name : "_1" in name[0])
-    # combine_results()
-    similar_desc = get_similar("training_data/training_set", k=5)
-    sim_result = compare_single("training_data/training_set", "PickupDrill-v0", 0.4, similar_desc, filter_fn=lambda name : "_1" in name[0])
-    print(sim_result)
+    combine_results()
 

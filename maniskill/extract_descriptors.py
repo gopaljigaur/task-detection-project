@@ -1,5 +1,5 @@
 import sys
-
+import math
 import os
 from typing import List
 import random
@@ -8,7 +8,7 @@ import yaml
 import torch
 import pickle as pkl
 
-stride = 2
+stride = 4
 patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -34,9 +34,11 @@ def get_descriptor_for_labeled(image_path: str, coordinates: str):
     tensor_path = f"{image_path.split('.')[0]}.pt"
     with torch.inference_mode():
         if os.path.exists(tensor_path):
-            descs = torch.load(tensor_path)
-            num_patches = (61,61)
-            load_size = (128,128)
+            descs = torch.load(tensor_path).detach()
+            pach_am = int(math.sqrt(descs.shape[2]))
+            num_patches = (pach_am,pach_am)
+            load = (num_patches[0] -1) * stride + patch_size
+            load_size = (load,load)
         x_descr = int(num_patches[1] / load_size[1] * x_int)
         y_descr = int(num_patches[0] / load_size[0] * y_int)
         descriptor_idx = num_patches[1] * y_descr + x_descr
@@ -79,7 +81,7 @@ def extract_descriptors(tasks: List[str], descriptor_amount: int = None):
             current_descriptors = torch.cat([current_descriptors, descriptor])
         descriptors.append({
             "object": task,
-            "descriptors": torch.transpose(current_descriptors,0,2)
+            "descriptors": torch.transpose(current_descriptors,0,2).detach()
         })
     return descriptors
 

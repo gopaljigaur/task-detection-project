@@ -1,4 +1,4 @@
-
+import math
 from typing import List, Callable, Union
 
 import torch.nn as nn
@@ -133,7 +133,7 @@ class ObjectLocator:
 
 
     def _aggregate(self, x: torch.Tensor, object_descriptors: torch.Tensor, threshold: float):
-        num_patches = [61,61]
+        num_patches = [int(math.sqrt(object_descriptors.shape[2])),int(math.sqrt(object_descriptors.shape[2]))]
         object_locations = []
         similarities = chunk_cosine_sim(object_descriptors, x)
         sims, idxs = torch.topk(similarities, 1)
@@ -152,7 +152,7 @@ class ObjectLocator:
 
 
     def _find_one(self, x: torch.Tensor, object_descriptors: torch.Tensor, threshold: float):
-        num_patches = [61,61]
+        num_patches = [int(math.sqrt(object_descriptors.shape[2])),int(math.sqrt(object_descriptors.shape[2]))]
         similarities = chunk_cosine_sim(object_descriptors, x)
         # find best matching position
         sims, idxs = torch.topk(similarities.flatten(1), 1)
@@ -190,12 +190,12 @@ class ObjectLocator:
         num_patches = [61,61]
         if self.extractor.num_patches is not None:
             num_patches = self.extractor.num_patches
-        obj_locations = torch.tensor([], device=device)
         with torch.inference_mode():
+            obj_locations = torch.tensor([], device=device)
             for threshold, obj in zip(self.threshold, self.object_descriptors):
                 obj_descr = obj["descriptors"]
                 obj_locations = torch.cat((obj_locations, self.location_method(x, obj_descr, threshold)), dim=1)
             # obj_locations.requires_grad=True
-        return obj_locations
+            return obj_locations
 
 
