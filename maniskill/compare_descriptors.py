@@ -150,5 +150,8 @@ def combine_results():
 
 if __name__ == '__main__':
     # try_configurations(lambda name : "_1" in name[0])
-    combine_results()
+    # combine_results()
+    similar_desc = get_similar("training_data/training_set", k=5)
+    sim_result = compare_single("training_data/training_set", "PickupDrill-v0", 0.4, similar_desc, filter_fn=lambda name : "_1" in name[0])
+    print(sim_result)
 
