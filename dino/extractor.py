@@ -63,7 +63,7 @@ class ViTExtractor:
         :return: the model
         """
         if 'dino' in model_type:
-            model = torch.hub.load('facebookresearch/dino:main', model_type)
+            model = torch.hub.load('facebookresearch/dino:main', model_type, verbose=False)
         else:  # model from timm -- load weights from timm to dino model (enables working on arbitrary size images).
             temp_model = timm.create_model(model_type, pretrained=True)
             model_type_dict = {
