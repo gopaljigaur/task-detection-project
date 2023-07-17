@@ -1,7 +1,7 @@
+import math
 from typing import List, Callable, Union
 
 import torch.nn as nn
-import torch.optim as optim
 import torch
 from PIL import Image
 from torchvision.datasets import ImageFolder
@@ -11,37 +11,21 @@ from dino.extractor import ViTExtractor
 import torch.nn.functional as F
 import pickle as pkl
 
-from maniskill.custom_tasks.helpers.TensorDataSet import TensorDataSet
+from maniskill.helpers.DescriptorConfiguration import DescriptorConfiguration
+from maniskill.helpers.TensorDataSet import TensorDataSet
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """ Computes cosine similarity between all possible pairs in two sets of vectors.
-    Operates on chunks so no large amount of GPU RAM is required.
-    :param x: an tensor of descriptors of shape Bx1x(t_x)xd' where d' is the dimensionality of the descriptors and t_x
-    is the number of tokens in x.
-    :param y: a tensor of descriptors of shape Bx1x(t_y)xd' where d' is the dimensionality of the descriptors and t_y
-    is the number of tokens in y.
-    :return: cosine similarity between all descriptors in x and all descriptors in y. Has shape of Bx1x(t_x)x(t_y) """
-    result_list = []
-    num_token_x = x.shape[2]
-    for token_idx in range(num_token_x):
-        token = x[:, :, token_idx, :].unsqueeze(dim=2)  # Bx1x1xd'
-        result_list.append(torch.nn.CosineSimilarity(dim=3)(token, y))  # Bx1xt
-    return torch.stack(result_list, dim=2)  # Bx1x(t_x)x(t_y)
 
 
 class TaskClassifier(nn.Module):
 
-    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: List[dict] =None):
+    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: dict=None):
         super().__init__()
         self.n_classes = n_classes
         self.extractor = ViTExtractor(stride=vit_stride)
         for param in self.extractor.model.parameters():
             param.requires_grad = False
-        self.obj_finder = ObjectLocator(self.extractor)
-        # TODO: create relation identifier
-        self.rel_finder = RelationIdentifier(self.obj_finder)
+        self.obj_finder = ObjectLocator(self.extractor, descriptors=descriptors)
         # create fc layer to get task
 
         #map from image pixels & depth to world space
@@ -61,7 +45,6 @@ class TaskClassifier(nn.Module):
         return F.softmax(copied_tensor, dim=1)
 
     def cached_forward(self, x: torch.Tensor):
-        # map descriptors to object locations
         x = self.obj_finder(x)
         x = x.clone().detach().requires_grad_(True)
         # get prediction using a linear layer
@@ -99,50 +82,55 @@ class TaskClassifier(nn.Module):
         else:
             return [dataset.class_to_idx, TensorDataSet(list(filter(filter_fn, dataset.imgs)))]
 
+def chunk_cosine_sim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """ Computes cosine similarity between all possible pairs in two sets of vectors.
+    Operates on chunks so no large amount of GPU RAM is required.
+    :param x: an tensor of descriptors of shape Bx1x(t_x)xd' where d' is the dimensionality of the descriptors and t_x
+    is the number of tokens in x.
+    :param y: a tensor of descriptors of shape Bx1x(t_y)xd' where d' is the dimensionality of the descriptors and t_y
+    is the number of tokens in y.
+    :return: cosine similarity between all descriptors in x and all descriptors in y. Has shape of Bx1x(t_x)x(t_y) """
+    result_list = []
+    num_token_x = x.shape[2]
+    for token_idx in range(num_token_x):
+        token = x[:, :, token_idx, :].unsqueeze(dim=2)  # Bx1x1xd'
+        result_list.append(torch.nn.CosineSimilarity(dim=3)(token, y))  # Bx1xt
+    return torch.stack(result_list, dim=2)  # Bx1x(t_x)x(t_y)
+
 
 class ObjectLocator:
 
     def __init__(self,
                  extractor: ViTExtractor,
-                 descriptor_labels: str = f"training_data/descriptor_data.pkl",
-                 descriptors: List[dict] = None,
-                 threshold: List[float] = None,
+                 descriptor_file="training_data/hand_descriptors.pkl",
                  location_method: str = None,
-                 aggregation_percentage: float = None):
+                 descriptors: dict = None):
         self.extractor = extractor
         if descriptors is None:
-            self.object_descriptors = pkl.load(open(descriptor_labels, "rb"))
+            self.descriptor_configurations = pkl.load(open(descriptor_file,"rb"))
         else:
-            self.object_descriptors = descriptors
-        if threshold is None:
-            self.threshold = [0.55] * len(self.object_descriptors)
-        else:
-            self.threshold = threshold
+            self.descriptor_configurations = descriptors
         if location_method is None:
             self.location_method = self._aggregate
-            if aggregation_percentage is None:
-                self.aggregation_percentage = 0.6
-            else:
-                self.aggregation_percentage = aggregation_percentage
         else:
-            if location_method =="find_one":
+            if location_method == "find_one":
                 self.location_method = self._find_one
-
-
 
     def __call__(self, x: torch.Tensor):
         return self.forward(x)
 
-    def add_locations(self, x: torch.Tensor):
+    def _aggregate(self, x: torch.Tensor, object_configuration: DescriptorConfiguration):
+        object_descriptors = object_configuration.descriptor_set.descriptors
+        threshold = object_configuration.threshold
+        aggregation_percentage = object_configuration.aggregation_percentage
 
-    def _aggregate(self, x: torch.Tensor, object_descriptors: torch.Tensor, threshold: float):
-        num_patches = [61,61]
+        num_patches = [int(math.sqrt(x.shape[2])),int(math.sqrt(x.shape[2]))]
         object_locations = []
         similarities = chunk_cosine_sim(object_descriptors, x)
         sims, idxs = torch.topk(similarities, 1)
         found_object = sims > threshold
         not_found = torch.tensor([0, 0, 0], device=device)
-        found_amount_mask = torch.sum(found_object, dim=2).squeeze(1) >= object_descriptors.shape[2] * self.aggregation_percentage
+        found_amount_mask = torch.sum(found_object, dim=2).squeeze(1) >= object_descriptors.shape[2] * aggregation_percentage
         for i in range(x.shape[0]):
             if not found_amount_mask[i]:
                 object_locations.append(not_found)
@@ -154,8 +142,11 @@ class ObjectLocator:
         return torch.stack(object_locations)
 
 
-    def _find_one(self, x: torch.Tensor, object_descriptors: torch.Tensor, threshold: float):
-        num_patches = [61,61]
+    def _find_one(self, x: torch.Tensor, object_configuration: DescriptorConfiguration):
+        object_descriptors = object_configuration.descriptor_set.descriptors
+        threshold = object_configuration.threshold
+
+        num_patches = [int(math.sqrt(x.shape[2])),int(math.sqrt(x.shape[2]))]
         similarities = chunk_cosine_sim(object_descriptors, x)
         # find best matching position
         sims, idxs = torch.topk(similarities.flatten(1), 1)
@@ -190,24 +181,14 @@ class ObjectLocator:
 
 
     def forward(self, x: torch.Tensor):
-        num_patches = [61,61]
         if self.extractor.num_patches is not None:
             num_patches = self.extractor.num_patches
-        obj_locations = torch.tensor([], device=device)
-
-        # TODO: add distance info to the coordinates
-        # TODO: add location info to object metadata
         with torch.inference_mode():
-            for threshold, obj in zip(self.threshold, self.object_descriptors):
-                obj_descr = obj["descriptors"]
-                obj_locations = torch.cat((obj_locations, self.location_method(x, obj_descr, threshold)), dim=1)
+            obj_locations = torch.tensor([], device=device)
+            for object_conf in self.descriptor_configurations.values():
+                # obj_descr = obj["descriptors"
+                obj_locations = torch.cat((obj_locations, self.location_method(x, object_conf)), dim=1)
             # obj_locations.requires_grad=True
-        return obj_locations
+            return obj_locations
 
 
-
-
-# TODO: another class to generate relative positions between objects
-class RelationIdentifier:
-    def __init__(self, extractor: ViTExtractor):
-        self.extractor = extractor
