@@ -8,6 +8,7 @@ import matplotlib.image as imageplt
 import os
 import time
 import shutil
+import pickle
 
 from typing import List
 
@@ -88,8 +89,16 @@ def create_data(task_name: str,
         obs, reward, done, info = env.step(action)
         # obs contains information about picture
         images = obs["image"]
+
+        # save rgb images
         imageplt.imsave(f"{save_path}/{current_file_name}_0.png", images[cameras[0]]["rgb"])
         imageplt.imsave(f"{save_path}/{current_file_name}_1.png", images[cameras[1]]["rgb"])
+
+        # save depth of image pixels
+        with open(f"{save_path}/{current_file_name}_0.dpt", 'wb') as dpt_file:
+            pickle.dump(images[cameras[0]]["depth"], dpt_file)
+        with open(f"{save_path}/{current_file_name}_1.dpt", 'wb') as dpt_file:
+            pickle.dump(images[cameras[1]]["depth"], dpt_file)
     env.close()
 
 

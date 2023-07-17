@@ -4,7 +4,7 @@ setup: setup-vit setup-mani
 
 setup-vit:
 	echo "Installing dependencies for Vision Transformer..."
-	conda install pytorch torchvision torchaudio cudatoolkit=11 -c pytorch
+	conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 	conda install tqdm
 	conda install -c conda-forge faiss
 	conda install -c conda-forge timm
@@ -21,7 +21,7 @@ setup-mani:
 
 setup-ni:
 	echo "Installing dependencies for Vision Transformer..."
-	conda install -y pytorch torchvision torchaudio cudatoolkit=11 -c pytorch
+	conda install -y pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 	conda install -y tqdm
 	conda install -y -c conda-forge faiss
 	conda install -y -c conda-forge timm

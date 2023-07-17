@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
+import pickle
 from PIL import Image
 
 
@@ -47,7 +48,7 @@ def label_interactive(path: str, overwrite: bool = False):
                     radius = 1
                     # plot image
                     axes.imshow(pil_image)
-                    # get input point from user
+                    # get input point from userl
                     fig.suptitle(
                         "Select points on the image (LClick). Next Image (RClick)",
                         fontsize=16,
@@ -77,21 +78,21 @@ def label_interactive(path: str, overwrite: bool = False):
                             mouse_stop=plt.MouseButton.RIGHT,
                             mouse_pop=plt.MouseButton.MIDDLE,
                         ))
-                    print(pts)
 
                     if len(pts) > 0:
-                        points = [str(pt)[1:-1].strip() for pt in pts]
-                        current_info[image_file] = {
-                            "task_name": task_dir,
-                            "points": points,
-                        }
-                        stream = open(labels_file, "w")
-                        yaml.dump(current_info, stream)
-                        stream.close()
-
+                        # points = [str(pt)[1:-1].strip() for pt in pts]
+                        # load depth info from pickle file
+                        depth_file = os.path.join(path, task_dir,
+                                                  image_file[:-4] + ".dpt")
+                        points = []
                         for pt in pts:
                             print("Selected point: (%f, %f)" % (pt[1], pt[0]))
                             y_coor, x_coor = int(pt[1]), int(pt[0])
+                            depths = None
+                            with open(depth_file, 'rb') as dpt_file:
+                                depths = pickle.load(dpt_file)
+                            z_coor = depths[y_coor, x_coor]
+                            print("Depth at selected point: %f" % z_coor)
 
                             # draw chosen point
                             center = (x_coor - 0.5, y_coor - 0.5)
@@ -101,7 +102,17 @@ def label_interactive(path: str, overwrite: bool = False):
                                                color=(1, 0, 0, 0.75))
                             axes.add_patch(patch)
                             visible_patches.append(patch)
+                            points.append(str(pt)[1:-1].strip() + " " + str(z_coor))
                         plt.draw()
+
+                        current_info[image_file] = {
+                            "task_name": task_dir,
+                            "points": points,
+                        }
+                        stream = open(labels_file, "w")
+                        yaml.dump(current_info, stream)
+                        stream.close()
+
     else:
         print("Data directory does not exist. Exiting...")
         return
