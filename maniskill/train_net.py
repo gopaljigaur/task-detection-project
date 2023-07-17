@@ -1,19 +1,7 @@
-import os.path
-import random
-
-import matplotlib.pyplot as plt
-from torchvision.transforms import transforms
-import numpy as np
-
-from maniskill.custom_tasks.helpers import TensorDataSet
 from maniskill.task_classifier import TaskClassifier
 import torch.nn as nn
-from PIL import Image
-from torchvision import transforms
 import torch.optim as optim
 import torch
-from torch.utils.data import DataLoader
-from torchvision.datasets import ImageFolder
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 net = TaskClassifier(vit_stride=4)

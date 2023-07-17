@@ -10,11 +10,11 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 from dino.extractor import ViTExtractor
-from maniskill.extract_descriptors import chunk_cosine_sim, get_similar, get_dissimilar, \
-    extract_descriptors
+from maniskill.extract_descriptors import extract_descriptors
+from maniskill.helpers.DescriptorConfiguration import DescriptorConfiguration
 from maniskill.task_classifier import *
 
-custom_single_tasks = ["PickupDrill-v0", "PickUpBlock-v0", "FindClamp-v0", "StoreScrewdriver-v0", "Mark-v0"]
+custom_single_tasks = ["PickupDrill-v0", "PickCube-v0", "FindClamp-v0", "StoreWrench-v0", "Hammer-v0"]
 stride = 4
 patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -46,14 +46,11 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
     return objects
 
 
-def compare_single(img_src: str, task: str, custom_threshold: float = 0.55, truth_descriptors=None, filter_fn: Callable[[str], bool] = None):
-    net = TaskClassifier(vit_stride=2, descriptors=truth_descriptors)
+def compare_single(img_src: str, task: str, config: DescriptorConfiguration, filter_fn: Callable[[str], bool] = None):
+    net = TaskClassifier(vit_stride=4, descriptors={config.descriptor_set.task:config})
     [class_mapping, dataset] = net.load_cache(img_src, filter_fn=filter_fn)
     data_loader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
     obj_finder = net.obj_finder
-    threshold = [0.55] * len(class_mapping)
-    threshold[class_mapping[task]] = custom_threshold
-    obj_finder.threshold = threshold
     true_positive = 0
     false_positive = 0
     true_negative = 0
@@ -64,19 +61,19 @@ def compare_single(img_src: str, task: str, custom_threshold: float = 0.55, trut
         tensor = obj_finder(tensors).detach()
         for i in range(tensor.shape[0]):
             if labels[i] == class_mapping[task]:
-                if not tensor[i, class_mapping[task]*3] == 0.:
+                if not tensor[i, 0] == 0.:
                     true_positive += 1
                 else:
                     false_negative += 1
             else:
-                if not tensor[i, class_mapping[task]*3] == 0.:
+                if not tensor[i, 0] == 0.:
                     false_positive += 1
                 else:
                     true_negative += 1
             if torch.count_nonzero(tensor[i]) > 2:
                 multiple += 1
     # print(f"TP: {true_positive}, FN: {false_negative}, FP: {false_positive}, TN: {true_negative}, multiple: {multiple}, total:{total}")
-    return [true_positive, false_negative, false_positive, true_negative, multiple, total]
+    config.record_performance(true_positive,false_negative,false_positive,true_negative,multiple,total)
 
 
 def precision(tp, fp):
@@ -94,65 +91,81 @@ def f1(precision, recall):
         return 0
     return 2 * ((precision*recall)/(precision + recall))
 
-def try_configurations(filter_fn=None):
+def try_configurations(filter_fn=None, name="."):
+    if not name == ".":
+        if not os.path.exists(f"training_data/{name}"):
+            os.mkdir(f"training_data/{name}")
     base_path = "training_data/training_set"
-    thresholds = [thr / 100 for thr in range(0, 60, 5)]
+    thresholds = [thr / 100 for thr in range(30, 60, 5)]
+    aggregate_thresholds = [thr / 100 for thr in range(20, 50, 5)]
     results = {}
-    for task in custom_single_tasks[:]:
+    for task in custom_single_tasks[:1]:
         print(f"{task} ", end="")
-        similar_desc=[]
-        dissimilar_desc=[]
-        all_desc=[]
         torch.cuda.empty_cache()
-        results[task] = {}
+        results[task] = []
+        descriptor_sets = []
+        all_desc = extract_descriptors([task])[0]
+        descriptor_sets.append(all_desc)
+        for k in [8,11,15]:
+            sim_set = all_desc.extract_top_k("similar", k)
+            sim_set.info = f"similar {k}"
+            descriptor_sets.append(sim_set)
+            dissim_set = all_desc.extract_top_k("dissimilar", k)
+            dissim_set.info = f"dissimilar {k}"
+            descriptor_sets.append(dissim_set)
         for threshold in thresholds:
-            similar_desc = get_similar(base_path, k=5)
-            sim_result = compare_single(base_path, task, threshold, similar_desc, filter_fn=filter_fn)
-            dissimilar_desc = get_dissimilar(base_path, k=5)
-            dis_result = compare_single(base_path, task, threshold, dissimilar_desc, filter_fn=filter_fn)
-            all_desc = extract_descriptors(os.listdir(base_path))
-            all_result = compare_single(base_path, task, threshold, all_desc, filter_fn=filter_fn)
-            results[task][threshold] = {
-                "similar": sim_result,
-                "dissimilar": dis_result,
-                "all_result": all_result
-            }
-            print(threshold, end=" ")
-        pkl.dump(results, open(f"training_data/descriptor_configuration_result_{task}.pkl", "wb"))
+            for aggregate_threshold in aggregate_thresholds:
+                for descriptor_set in descriptor_sets:
+                    torch.cuda.empty_cache()
+                    configuration = DescriptorConfiguration(descriptor_set, threshold, aggregate_threshold)
+                    compare_single(base_path, task, configuration, filter_fn=filter_fn)
+                    results[task].append(configuration)
+                print(threshold, end=" ")
+        for descriptor_set in descriptor_sets:
+            descriptor_set.descriptors = None
+        pkl.dump(results, open(f"training_data/{name}/descriptor_configuration_result_{task}.pkl", "wb"))
         results = {}
         print()
 
 def combine_results():
-    results = {}
-    for task in custom_single_tasks:
-        result = pkl.load(open(f"training_data/descriptor_configuration_result_{task}.pkl", "rb"))
-        processed_result = {
-            "similar": {},
-            "dissimilar": {},
-            "all_results": {}
-        }
-        for threshold in result[task].keys():
-            sim = result[task][threshold]["similar"]
-            sim_rec = recall(sim[0], sim[1])
-            sim_prec = precision(sim[0], sim[2])
-            dissim = result[task][threshold]["dissimilar"]
-            dissim_rec = recall(dissim[0], dissim[1])
-            dissim_prec = precision(dissim[0], dissim[2])
-            all_d = result[task][threshold]["all_result"]
-            all_d_rec = recall(all_d[0], all_d[1])
-            all_d_prec = precision(all_d[0], all_d[2])
-            # processed_result[threshold] = {
-            #     "similar": (sim_prec,sim_rec),
-            #     "dissimlar": (dissim_prec, dissim_rec),
-            #     "all_result": (all_d_prec, all_d_rec)
-            # }
-            processed_result["similar"][threshold] = (sim_prec, sim_rec, f1(sim_prec, sim_rec))
-            processed_result["dissimilar"][threshold] = (dissim_prec, dissim_rec, f1(dissim_prec, dissim_rec))
-            processed_result["all_results"][threshold] = (all_d_prec, all_d_rec, f1(all_d_prec, all_d_rec))
-        results[task] = processed_result
-    pkl.dump(results, open(f"training_data/results_combined.pkl", "wb"))
+    folders = filter(lambda name: "_cam" in name ,os.listdir("training_data"))
+    for folder in folders:
+        results = {}
+        for task in custom_single_tasks[:]:
+            result = pkl.load(open(f"training_data/{folder}/descriptor_configuration_result_{task}.pkl", "rb"))
+            sorted_results = sorted(result[task], key=lambda config : config.f1)
+            results[task] = sorted_results
+        pkl.dump(results, open(f"training_data/{folder}/results_combined.pkl", "wb"))
+
+
+def extract_top_k_results(result_dict, k=10, sort_fn=lambda conf: conf.f1):
+    new_res = {}
+    descriptors = {}
+    for task, result in result_dict.items():
+        sorted_res = sorted(result, reverse=True, key=sort_fn)
+        top_k = sorted_res[:k]
+        task_res = []
+        for entry in top_k:
+            task_res.append((entry.descriptor_set.info, entry.threshold, entry.aggregation_percentage, sort_fn(entry),(entry.tp,entry.fp,entry.fn)))
+        new_res[task] = task_res
+        descriptors[task] = top_k[0]
+    return (new_res, descriptors)
+
 
 if __name__ == '__main__':
-    # try_configurations(lambda name : "_1" in name[0])
-    combine_results()
-
+    try_configurations(lambda name : "_0" in name[0], name="static_cam_v0")
+    try_configurations(lambda name : "_1" in name[0], name="hand_cam_v0")
+    # try_configurations(name="both_cam_v0")
+    # try_configurations()
+    # combine_results()
+    results_hand = pkl.load(open(f"training_data/hand_cam_v0/results_combined.pkl", "rb"))
+    results_static = pkl.load(open(f"training_data/static_cam_v0/results_combined.pkl", "rb"))
+    hand_k_top, descr_hand = extract_top_k_results(results_hand)
+    static_k_top, descr_static = extract_top_k_results(results_static, sort_fn=lambda c: (c.precision,c.f1))
+    for (hand, static) in zip(descr_hand.values(), descr_static.values()):
+        hand.descriptor_set.reload_descriptors()
+        static.descriptor_set.reload_descriptors()
+    pkl.dump(descr_hand, open(f"training_data/hand_descriptors.pkl","wb"))
+    pkl.dump(descr_static, open(f"training_data/static_descriptors.pkl", "wb"))
+    print(hand_k_top)
+    print(static_k_top)
