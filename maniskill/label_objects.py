@@ -8,11 +8,12 @@ import pickle
 from PIL import Image
 
 
-def label_interactive(path: str, overwrite: bool = False):
+def label_interactive(path: str, overwrite: bool = False, labels_per_task: int = 5):
     """
     finding similarity between a descriptor in one image to the all descriptors in the other image.
-    :param path: path to image directory.
-    :param stride: stride of the model.
+    :param path:
+    :param labels_per_task:
+    :param overwrite:
     """
 
     # plot
@@ -22,7 +23,10 @@ def label_interactive(path: str, overwrite: bool = False):
             fig, axes = plt.subplots()
             visible_patches = []
             print("Current task: %s" % task_dir)
+            num_labels = 0
             for image_file in os.listdir(os.path.join(path, task_dir)):
+                if num_labels >= labels_per_task:
+                    break
                 if image_file.endswith(".png"):
                     print("Current file: %s" % image_file)
                     current_info = {}
@@ -37,6 +41,7 @@ def label_interactive(path: str, overwrite: bool = False):
                             print("Image's data present already. ", end="")
                             if not overwrite:
                                 print("Skipping...")
+                                num_labels += 1
                                 continue
                             else:
                                 print("Overwriting...")
@@ -48,7 +53,7 @@ def label_interactive(path: str, overwrite: bool = False):
                     radius = 1
                     # plot image
                     axes.imshow(pil_image)
-                    # get input point from userl
+                    # get input point from user
                     fig.suptitle(
                         "Select points on the image (LClick). Next Image (RClick)",
                         fontsize=16,
@@ -91,7 +96,7 @@ def label_interactive(path: str, overwrite: bool = False):
                             depths = None
                             with open(depth_file, 'rb') as dpt_file:
                                 depths = pickle.load(dpt_file)
-                            z_coor = depths[y_coor, x_coor]
+                            z_coor = depths[y_coor, x_coor][0]
                             print("Depth at selected point: %f" % z_coor)
 
                             # draw chosen point
@@ -112,6 +117,8 @@ def label_interactive(path: str, overwrite: bool = False):
                         stream = open(labels_file, "w")
                         yaml.dump(current_info, stream)
                         stream.close()
+                        num_labels += 1
+
 
     else:
         print("Data directory does not exist. Exiting...")
@@ -137,15 +144,20 @@ if __name__ == "__main__":
         description="Label the objects in the training set of images.")
     parser.add_argument("--path",
                         type=str,
-                        required=True,
-                        help="Path to the dataset directory")
-    parser.add_argument(
-        "--overwrite",
+                        default="training_data/training_set",
+                        help="Path to the dataset directory"
+                        )
+    parser.add_argument("--labels_per_task",
+                        type=int,
+                        default=5,
+                        help="Number of labels per task"
+                        )
+    parser.add_argument("--overwrite",
         default="False",
         type=str2bool,
         help="Overwrite the existing label data.",
-    )
+        )
 
     args = parser.parse_args()
 
-    label_interactive(args.path, args.overwrite)
+    label_interactive(args.path, args.overwrite, args.labels_per_task)

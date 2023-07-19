@@ -115,7 +115,10 @@ def swap_background(background_name: str):
 
 
 if __name__ == "__main__":
-    camera_cfg={"height":256, "width":256}
+    camera_cfg = {
+        "height": 256,
+        "width": 256
+    }
     create_data_set(custom_single_tasks,
                     num_samples_per_task=5,
                     camera_cfg=camera_cfg)

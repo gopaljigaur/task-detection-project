@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 from dino.extractor import ViTExtractor
-from maniskill.extract_descriptors import extract_descriptors
+from maniskill.extract_descriptors import extract_image_descriptors
 from maniskill.helpers.DescriptorConfiguration import DescriptorConfiguration
 from maniskill.task_classifier import *
 
@@ -104,7 +104,7 @@ def try_configurations(filter_fn=None, name="."):
         torch.cuda.empty_cache()
         results[task] = []
         descriptor_sets = []
-        all_desc = extract_descriptors([task])[0]
+        all_desc = extract_image_descriptors([task])[0]
         descriptor_sets.append(all_desc)
         for k in [8,11,15]:
             sim_set = all_desc.extract_top_k("similar", k)
