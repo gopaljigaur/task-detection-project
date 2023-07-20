@@ -30,7 +30,6 @@ class TaskClassifier(nn.Module):
 
         #map from image pixels & depth to world space
 
-        self.classifier = nn.Linear(self.n_classes * 3, self.n_classes).cuda()
 
     def forward(self, x: torch.Tensor):
         # extract descriptors from image
@@ -40,17 +39,13 @@ class TaskClassifier(nn.Module):
         x = self.obj_finder(x)
         # get prediction using a linear layer
         copied_tensor = x.clone().detach().requires_grad_(True)
-        copied_tensor = self.classifier(copied_tensor)
-        copied_tensor = F.relu(copied_tensor)
-        return F.softmax(copied_tensor, dim=1)
+        return copied_tensor
 
     def cached_forward(self, x: torch.Tensor):
         x = self.obj_finder(x)
         x = x.clone().detach().requires_grad_(True)
         # get prediction using a linear layer
-        x = self.classifier(x)
-        x = F.relu(x)
-        return F.softmax(x, dim=1)
+        return x
 
     def cache_object_output(self, x: torch.Tensor):
         # extract descriptors from image
@@ -62,8 +57,6 @@ class TaskClassifier(nn.Module):
     def convert_to_image(self, image_path: str):
         return self.extractor.preprocess(image_path)[1]
 
-    def get_trainable_params(self):
-        return self.classifier.parameters()
 
     def preprocess(self, image_base_path:str):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
@@ -75,7 +68,7 @@ class TaskClassifier(nn.Module):
                 tensor = self.cache_object_output(tensor)
                 torch.save(tensor, f"{image.split('.')[0]}.pt")
 
-    def load_cache(self, image_base_path: str, filter_fn: Callable[[str], bool] =None):
+    def load_cache(self, image_base_path: str, filter_fn: Callable[[str], bool]=None):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
         if filter is None:
             return [dataset.class_to_idx, TensorDataSet(dataset.imgs)]
@@ -102,9 +95,10 @@ class ObjectLocator:
 
     def __init__(self,
                  extractor: ViTExtractor,
-                 descriptor_file="training_data/hand_descriptors.pkl",
+                 descriptor_file="training_data/optim.pkl",
                  location_method: str = None,
-                 descriptors: dict = None):
+                 descriptors: dict = None,
+                 class_mapping: dict = None):
         self.extractor = extractor
         if descriptors is None:
             self.descriptor_configurations = pkl.load(open(descriptor_file,"rb"))
@@ -115,6 +109,8 @@ class ObjectLocator:
         else:
             if location_method == "find_one":
                 self.location_method = self._find_one
+
+        self.class_mapping = class_mapping
 
     def __call__(self, x: torch.Tensor):
         return self.forward(x)
@@ -138,6 +134,7 @@ class ObjectLocator:
                 patch_idxs = idxs[i, found_object[i]].unsqueeze(1)
                 coordinates = self._extract_coordinates_from_patch(patch_idxs, num_patches, self.extractor.stride, self.extractor.model.patch_embed.patch_size)
                 object_location = torch.mean(coordinates, dim=0)
+                object_location[2] = torch.sum(found_object, dim=2).squeeze(1)[i]/object_descriptors.shape[2]
                 object_locations.append(object_location)
         return torch.stack(object_locations)
 
@@ -185,10 +182,15 @@ class ObjectLocator:
             num_patches = self.extractor.num_patches
         with torch.inference_mode():
             obj_locations = torch.tensor([], device=device)
-            for object_conf in self.descriptor_configurations.values():
-                # obj_descr = obj["descriptors"
-                obj_locations = torch.cat((obj_locations, self.location_method(x, object_conf)), dim=1)
+            if self.class_mapping is None:
+                for object_conf in self.descriptor_configurations.values():
+                    # obj_descr = obj["descriptors"
+                    obj_locations = torch.cat((obj_locations, self.location_method(x, object_conf)), dim=1)
             # obj_locations.requires_grad=True
+            else:
+                for key in self.class_mapping.keys():
+                    object_conf = self.descriptor_configurations[key]
+                    obj_locations = torch.cat((obj_locations, self.location_method(x, object_conf)), dim=1)
             return obj_locations
 
 
