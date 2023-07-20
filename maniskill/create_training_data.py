@@ -37,13 +37,13 @@ def create_data_set(tasks: List[str],
                     objects: List[str] = None,
                     camera_cfg = None):
     label_dict = {}
-    if not os.path.isdir("training_data"):
-        os.mkdir("training_data")
+    if not os.path.isdir(save_path.split("/")[0]):
+        os.mkdir(save_path.split("/")[0])
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
+    backgrounds_incl_none = backgrounds
+    backgrounds_incl_none.append("")
     for task in tasks:
-        backgrounds_incl_none = backgrounds
-        backgrounds_incl_none.append("")
         for background in backgrounds_incl_none:
             path = f"{save_path}/{task}"
             if not os.path.isdir(path):
@@ -108,5 +108,13 @@ def swap_background(background_name: str):
 if __name__ == "__main__":
     camera_cfg={"height":256, "width":256}
     create_data_set(custom_single_tasks,
-                    num_samples_per_task=5,
+                    num_samples_per_task=15,
+                    camera_cfg=camera_cfg)
+    create_data_set(custom_single_tasks,
+                    save_path="training_data/validation_set",
+                    num_samples_per_task=15,
+                    camera_cfg=camera_cfg)
+    create_data_set(custom_single_tasks,
+                    save_path="training_data/test_set",
+                    num_samples_per_task=15,
                     camera_cfg=camera_cfg)
