@@ -28,21 +28,26 @@ class TaskClassifier(nn.Module):
         self.obj_finder = ObjectLocator(self.extractor, descriptors=descriptors)
         # create fc layer to get task
 
-        #map from image pixels & depth to world space
 
 
     def forward(self, x: torch.Tensor):
+        # x = B, H, W, C
         # extract descriptors from image
         with torch.inference_mode():
             x = self.extractor.extract_descriptors(x)
+        # x = B, 1, patch_amount, 384
         # map descriptors to object locations
         x = self.obj_finder(x)
-        # get prediction using a linear layer
+        # x = B, num_classes * 3
+
         copied_tensor = x.clone().detach().requires_grad_(True)
         return copied_tensor
 
     def cached_forward(self, x: torch.Tensor):
+        # x is the saved descriptor for an image
+        # x = B, 1, patch_amount, 384
         x = self.obj_finder(x)
+        # x = B, num_classes * 3
         x = x.clone().detach().requires_grad_(True)
         # get prediction using a linear layer
         return x
@@ -51,6 +56,7 @@ class TaskClassifier(nn.Module):
         # extract descriptors from image
         with torch.inference_mode():
             x = self.extractor.extract_descriptors(x)
+            # x = B, 1, patch_amount, 384
         # map descriptors to object locations
         return x.clone().detach().requires_grad_(True)
 
@@ -116,25 +122,41 @@ class ObjectLocator:
         return self.forward(x)
 
     def _aggregate(self, x: torch.Tensor, object_configuration: DescriptorConfiguration):
+        # get descriptors for the searched objects from the configuration
         object_descriptors = object_configuration.descriptor_set.descriptors
+        # get threshold for the searched objects from the configuration
         threshold = object_configuration.threshold
+        # get aggregation_percentage for the searched objects from the configuration
         aggregation_percentage = object_configuration.aggregation_percentage
-
+        # extract information about num_patches, needed later for localization
         num_patches = [int(math.sqrt(x.shape[2])),int(math.sqrt(x.shape[2]))]
         object_locations = []
         similarities = chunk_cosine_sim(object_descriptors, x)
+        # similarities = B, 1, descriptor_amount, patch_amount
         sims, idxs = torch.topk(similarities, 1)
+        # sims, idxs = B, 1, descriptor_amount, 1
         found_object = sims > threshold
+        # found_object : BooleanTensor = B, 1, descriptor_amount, 1
         not_found = torch.tensor([0, 0, 0], device=device)
+        # found_amount_mask:
+        # torch.sum(...).squeeze(1) returns the amount of objects found for the image -> shape: B, 1
+        # then this is compared with the aggregation_percentage multiplied with the amount of object_descriptors used.
+        # This results in a B, 1 Boolean Tensor
         found_amount_mask = torch.sum(found_object, dim=2).squeeze(1) >= object_descriptors.shape[2] * aggregation_percentage
+        # the following can be maybe sped up using something like torch.where
         for i in range(x.shape[0]):
             if not found_amount_mask[i]:
+                # append [0,0,0]
                 object_locations.append(not_found)
             else:
                 patch_idxs = idxs[i, found_object[i]].unsqueeze(1)
+                # patch_idxs: found_amount x 1
                 coordinates = self._extract_coordinates_from_patch(patch_idxs, num_patches, self.extractor.stride, self.extractor.model.patch_embed.patch_size)
+                # coordinates = shape: found_amount x 3
                 object_location = torch.mean(coordinates, dim=0)
+                # object_location shape: 3,
                 object_location[2] = torch.sum(found_object, dim=2).squeeze(1)[i]/object_descriptors.shape[2]
+                # set aggregation percentage as 3rd value
                 object_locations.append(object_location)
         return torch.stack(object_locations)
 
@@ -148,17 +170,7 @@ class ObjectLocator:
         # find best matching position
         sims, idxs = torch.topk(similarities.flatten(1), 1)
         sim, idx = sims[0], idxs[0]
-        # if sim < self.threshold:
-        #     # object not currently present in scene
-        #     obj_locations = torch.cat((obj_locations, torch.tensor([-99, -99, -99], device=device)))
-        #     continue
         patch_idx = idxs % (num_patches[0] * num_patches[1])
-        # y_desc, x_desc = patch_idx // num_patches[1], patch_idx % num_patches[1]
-        # coordinates = torch.cat(((x_desc - 1) * self.extractor.stride[1] + self.extractor.stride[
-        #     1] + self.extractor.model.patch_embed.patch_size // 2 - .5,
-        #                          (y_desc - 1) * self.extractor.stride[0] + self.extractor.stride[
-        #                              0] + self.extractor.model.patch_embed.patch_size // 2 - .5,
-        #                          torch.zeros((idxs.shape[0], 1), device=device)), 1)
         coordinates = self._extract_coordinates_from_patch(patch_idx, num_patches, self.extractor.stride, self.extractor.model.patch_embed.patch_size)
         # obj_locations = torch.cat((obj_locations, torch.tensor(coordinates, device=device)))
         not_present = torch.tensor([0, 0, 0], device=device)
@@ -178,19 +190,26 @@ class ObjectLocator:
 
 
     def forward(self, x: torch.Tensor):
+        # x = B, 1, patch_amount, 384
         if self.extractor.num_patches is not None:
             num_patches = self.extractor.num_patches
         with torch.inference_mode():
             obj_locations = torch.tensor([], device=device)
+            # loop over every object to check whether it is in the scene
             if self.class_mapping is None:
                 for object_conf in self.descriptor_configurations.values():
-                    # obj_descr = obj["descriptors"
+                    # different location methods can be used, default is _aggregation
                     obj_locations = torch.cat((obj_locations, self.location_method(x, object_conf)), dim=1)
-            # obj_locations.requires_grad=True
+                    # output of self.location_method = B, 3
+                    # concatenated at dim 1 -> leads to dimensions B, num classes * 3
             else:
+                # we use class_mapping so the indexes of the outputs will be the same as the labels.
                 for key in self.class_mapping.keys():
                     object_conf = self.descriptor_configurations[key]
+                    # different location methods can be used, default is _aggregation
                     obj_locations = torch.cat((obj_locations, self.location_method(x, object_conf)), dim=1)
+                    # output of self.location_method = B, 3
+                    # concatenated at dim 1 -> leads to dimensions B, num classes * 3
             return obj_locations
 
 
