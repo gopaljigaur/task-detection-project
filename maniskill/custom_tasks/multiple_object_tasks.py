@@ -68,7 +68,7 @@ class CleanMug(MultipleObjectTask):
 
 @register_env("FastenBlock-v0", max_episode_steps=200)
 class CleanMug(MultipleObjectTask):
-    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/release_block/episode.json.gz"
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/fasten_block/episode.json.gz"
 
     def __init__(
             self,
@@ -82,21 +82,7 @@ class CleanMug(MultipleObjectTask):
 
 @register_env("CollectTools-v0", max_episode_steps=200)
 class CleanMug(MultipleObjectTask):
-    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/release_block/episode.json.gz"
-
-    def __init__(
-            self,
-            episode_json: str = None,
-            asset_root: str = None,
-            model_json: str = None,
-            **kwargs,
-    ):
-        super().__init__(episode_json, asset_root, model_json, **kwargs)
-
-
-@register_env("MarkBlock-v0", max_episode_steps=200)
-class CleanMug(MultipleObjectTask):
-    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/mark_block/episode.json.gz"
+    DEFAULT_EPISODE_JSON = "{ASSET_DIR}/collect_tools/episode.json.gz"
 
     def __init__(
             self,
