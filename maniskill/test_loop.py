@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 
 from maniskill.helpers.DescriptorConfiguration import DescriptorConfiguration
 from maniskill.task_classifier import TaskClassifier
-
+import matplotlib.pyplot as plt
 
 def test_config(img_src: str, configs: dict[str:DescriptorConfiguration], filter_fn: Callable[[str], bool] = None):
     net = TaskClassifier(vit_stride=4, descriptors=configs)
@@ -59,7 +59,40 @@ def f1(precision,recall):
         return 0
     return 2 * ((precision * recall) / (precision + recall))
 
+def plot_results(results):
+    # Load data from the pickle file
+    out = pkl.load(open(results, "rb"))
+
+    # Create empty lists to store precision and recall for each task
+    precision_values = {}
+    recall_values = {}
+
+    # Iterate through each task and extract precision and recall values
+    for task, res in out.items():
+        precision_values[task] = res["precision"]
+        recall_values[task] = res["recall"]
+
+    # Plot precision and recall for each task using a bar plot with error bars
+    plt.figure(figsize=(10, 6))
+    tasks = list(out.keys())
+    positions = range(len(tasks))
+    bar_width = 0.4
+
+    plt.bar(positions, precision_values.values(), bar_width, label='Precision', alpha=0.7)
+    plt.bar([pos + bar_width for pos in positions], recall_values.values(), bar_width, label='Recall', alpha=0.7)
+
+    plt.xlabel('TASKS')
+    plt.ylabel('SCORES')
+    plt.title('Precision and Recall for some Task')
+    plt.xticks([pos + bar_width / 2 for pos in positions], tasks, rotation=45, ha='right')
+    plt.legend()
+    plt.grid(axis='y')
+    plt.tight_layout()
+    plt.savefig("results_plot.png", dpi=300)
+    plt.show()
+
 
 if __name__ == "__main__":
-    res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
-    pkl.dump(res, open("training_data/results.pkl","wb"))
+    #res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
+    #pkl.dump(res, open("training_data/results.pkl","wb"))
+    plot_results("training_data/saved_descriptors/results.pkl")
