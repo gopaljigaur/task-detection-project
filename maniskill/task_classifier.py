@@ -14,23 +14,41 @@ import pickle as pkl
 from maniskill.helpers.DescriptorConfiguration import DescriptorConfiguration
 from maniskill.helpers.TensorDataSet import TensorDataSet
 
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class TaskClassifier(nn.Module):
 
-    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: dict=None):
+    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: dict=None, hidden_sizes: List[int] = [64, 32]):
         super().__init__()
         self.n_classes = n_classes
+        self.hidden_sizes = hidden_sizes
+        self.input_layer = nn.Linear(self.n_classes * 3, self.hidden_sizes[0])
+
+        # Define hidden layers
+        self.hidden_layers = nn.ModuleList()
+        for i in range(1, len(self.hidden_sizes)):
+            self.hidden_layers.append(nn.Linear(self.hidden_sizes[i - 1], self.hidden_sizes[i]))
+
+        # Define output layer
+        self.output_layer = nn.Linear(self.hidden_sizes[-1], self.n_classes)
+
         self.extractor = ViTExtractor(stride=vit_stride)
         for param in self.extractor.model.parameters():
             param.requires_grad = False
         self.obj_finder = ObjectLocator(self.extractor, descriptors=descriptors)
-        # create fc layer to get task
-
-
+        # Use Decision tree instead of linear layer for classsification
+        # self.classifier = DecisionTreeClassifier(max_depth=5)
+        # self.scaler = StandardScaler()
+        # self.threshold = threshold
+        self.threshold = threshold
 
     def forward(self, x: torch.Tensor):
+
         # x = B, H, W, C
         # extract descriptors from image
         with torch.inference_mode():
@@ -39,8 +57,12 @@ class TaskClassifier(nn.Module):
         # map descriptors to object locations
         x = self.obj_finder(x)
         # x = B, num_classes * 3
-
         copied_tensor = x.clone().detach().requires_grad_(True)
+        #y_pred = self.classifier.predict(self.scaler.transform(copied_tensor.cpu().numpy()))
+        copied_tensor = torch.relu(self.input_layer(copied_tensor))
+        for layer in self.hidden_layers:
+            copied_tensor = torch.relu(layer(copied_tensor))
+        copied_tensor = self.output_layer(copied_tensor)
         return copied_tensor
 
     def cached_forward(self, x: torch.Tensor):
@@ -49,7 +71,11 @@ class TaskClassifier(nn.Module):
         x = self.obj_finder(x)
         # x = B, num_classes * 3
         x = x.clone().detach().requires_grad_(True)
-        # get prediction using a linear layer
+        # get prediction using decision tree
+        x = torch.relu(self.input_layer(x))
+        for layer in self.hidden_layers:
+            x = torch.relu(layer(x))
+        x = self.output_layer(x)
         return x
 
     def cache_object_output(self, x: torch.Tensor):

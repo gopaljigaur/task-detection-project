@@ -93,6 +93,6 @@ def plot_results(results):
 
 
 if __name__ == "__main__":
-    #res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
-    #pkl.dump(res, open("training_data/results.pkl","wb"))
+    res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
+    pkl.dump(res, open("training_data/results.pkl","wb"))
     plot_results("training_data/saved_descriptors/results.pkl")
