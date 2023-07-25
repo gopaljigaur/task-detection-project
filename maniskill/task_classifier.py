@@ -115,8 +115,14 @@ class ObjectLocator:
         else:
             if location_method == "find_one":
                 self.location_method = self._find_one
-
         self.class_mapping = class_mapping
+        self.skip_agg = False
+        if self.class_mapping is None:
+            self.class_mapping = {}
+            i=0
+            for key in self.descriptor_configurations.keys():
+                self.class_mapping[key] = i
+                i+=1
 
     def __call__(self, x: torch.Tensor):
         return self.forward(x)
@@ -144,6 +150,8 @@ class ObjectLocator:
         # This results in a B, 1 Boolean Tensor
         found_amount_mask = torch.sum(found_object, dim=2).squeeze(1) >= object_descriptors.shape[2] * aggregation_percentage
         # the following can be maybe sped up using something like torch.where
+        if self.skip_agg:
+            found_amount_mask = torch.tensor([True] * x.shape[0], device=device)
         for i in range(x.shape[0]):
             if not found_amount_mask[i]:
                 # append [0,0,0]
