@@ -163,5 +163,5 @@ cython_debug/
 maniskill/data
 demos
 imgui.ini
-
+maniskill/*.pth
 .idea
