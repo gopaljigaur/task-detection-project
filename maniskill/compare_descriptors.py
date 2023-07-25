@@ -49,7 +49,7 @@ def reformat_descriptors(descriptors: torch.Tensor, labels: List[str]):
 def compare_single(img_src: str, task: str, config: DescriptorConfiguration, filter_fn: Callable[[str], bool] = None):
     net = TaskClassifier(vit_stride=4, descriptors={config.descriptor_set.task:config})
     [class_mapping, dataset] = net.load_cache(img_src, filter_fn=filter_fn)
-    data_loader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
+    data_loader = DataLoader(dataset=dataset, batch_size=16, shuffle=True)
     obj_finder = net.obj_finder
     true_positive = 0
     false_positive = 0
@@ -119,7 +119,7 @@ def try_configuration(task:str, filter_fn=None, name=".", thresholds=None, k_lis
     for threshold in thresholds:
         for descriptor_set in descriptor_sets:
             torch.cuda.empty_cache()
-            configuration = DescriptorConfiguration(descriptor_set, threshold,0)
+            configuration = DescriptorConfiguration(descriptor_set, threshold, 0)
             run_experiment(base_path, task, configuration, filter_fn=filter_fn)
             results[task].append(configuration)
         print(threshold, end=" ")
@@ -156,8 +156,9 @@ def extract_top_k_results(result_dict, k=10, sort_fn=lambda conf: conf.f1):
 
 
 def optimize_configurations(task:str, iterations:int, k:int, performance_metric=lambda conf: (conf.f1,conf.precision), filter_fn= None, name:str ="optim", explore =0.2):
-    thresholds = [thr / 100 for thr in range(20, 100, 20)]
-    k_list = [8,14,20]
+    thresholds = [thr / 100 for thr in range(20, 100, 30)]
+    # k_list = [8,14,20]
+    k_list = []
     top_k = []
     all_res =[]
     for i in range(1,iterations+1):
@@ -208,10 +209,11 @@ def optimize_configurations(task:str, iterations:int, k:int, performance_metric=
 
 def run_experiment(img_src: str, task: str, config: DescriptorConfiguration, filter_fn:Callable = None):
     net = TaskClassifier(vit_stride=4, descriptors={config.descriptor_set.task: config})
-    [_, dataset] = net.load_cache(img_src, filter_fn=filter_fn)
-    data_loader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
+    [class_mapping, dataset] = net.load_cache(img_src, filter_fn=filter_fn)
+    data_loader = DataLoader(dataset=dataset, batch_size=16, shuffle=True)
     obj_finder = net.obj_finder
-    class_mapping = obj_finder.class_mapping
+    obj_finder.skip_agg = True
+    # class_mapping = obj_finder.class_mapping
     pos = torch.tensor([],device=device)
     neg = torch.tensor([],device=device)
     for [tensors, labels] in data_loader:
@@ -229,11 +231,11 @@ def compute_aggregation_percentage(pos_thr: torch.Tensor, neg_thr: torch.Tensor)
     pos = torch.sort(pos_thr).values
     neg = torch.sort(neg_thr).values
     agg_idx = 0
-    agg = pos[0]
+    agg = pos[0].item()
     metrics = get_metrics(pos, neg, agg)
     for i in range(1, pos.shape[0]):
-        curr_agg = pos[i]
-        curr_metrics = get_metrics(pos,neg,agg)
+        curr_agg = pos[i].item()
+        curr_metrics = get_metrics(pos,neg,curr_agg)
         if curr_metrics["f1"] > metrics["f1"]:
             metrics = curr_metrics
             agg = curr_agg
@@ -250,6 +252,17 @@ def get_metrics(pos:torch.Tensor, neg: torch.Tensor, agg: float):
 
 if __name__ == '__main__':
     for i in range(len(custom_single_tasks)):
+        optim_config = optimize_configurations(custom_single_tasks[i],3,6, filter_fn=lambda name:"_1" in name[0], name="hand")
+        pkl.dump(optim_config, open(f"training_data/optim_{custom_single_tasks[i]}_hand.pkl","wb"))
+    all_desc = {}
+    for i in range(len(custom_single_tasks)):
+        config = pkl.load(open(f"training_data/optim_{custom_single_tasks[i]}_hand.pkl","rb"))
+        config = sorted(config, reverse=True, key=lambda c:c.f1)
+        config[0].descriptor_set.reload_descriptors()
+        all_desc[custom_single_tasks[i]]=(config[0])
+    pkl.dump(all_desc, open(f"training_data/optim_hand.pkl","wb"))
+
+    for i in range(len(custom_single_tasks)):
         optim_config = optimize_configurations(custom_single_tasks[i],6,6, filter_fn=lambda name:"_0" in name[0], name="static")
         pkl.dump(optim_config, open(f"training_data/optim_{custom_single_tasks[i]}_static.pkl","wb"))
     all_desc = {}
@@ -258,14 +271,3 @@ if __name__ == '__main__':
         config[0].descriptor_set.reload_descriptors()
         all_desc[custom_single_tasks[i]]=(config[0])
     pkl.dump(all_desc, open(f"training_data/optim_static.pkl","wb"))
-
-    for i in range(len(custom_single_tasks)):
-        optim_config = optimize_configurations(custom_single_tasks[i],6,6, filter_fn=lambda name:"_1" in name[0], name="hand")
-        pkl.dump(optim_config, open(f"training_data/optim_{custom_single_tasks[i]}_hand.pkl","wb"))
-    all_desc = {}
-    for i in range(len(custom_single_tasks)):
-        config = pkl.load(open(f"training_data/optim_{custom_single_tasks[i]}_hand","rb"))
-        config[0].descriptor_set.reload_descriptors()
-        all_desc[custom_single_tasks[i]]=(config[0])
-    pkl.dump(all_desc, open(f"training_data/optim_hand.pkl","wb"))
-
