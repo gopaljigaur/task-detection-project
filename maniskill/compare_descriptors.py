@@ -14,7 +14,7 @@ from maniskill.extract_descriptors import extract_descriptors
 from maniskill.helpers.DescriptorConfiguration import DescriptorConfiguration
 from maniskill.task_classifier import *
 
-custom_single_tasks = ["PickupDrill-v0", "PickCube-v0", "FindClamp-v0", "StoreWrench-v0", "Hammer-v0"]
+custom_single_tasks = ["PickupDrill-v0", "PickUpBlock-v0", "FindClamp-v0", "StoreWrench-v0", "Hammer-v0"]
 stride = 4
 patch_size = 8
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -93,9 +93,7 @@ def try_configurations_for_tasks(tasks:List[str]):
     for task in tasks:
         try_configuration(task)
 
-def try_configuration(task:str, filter_fn=None, name=".", thresholds=None, aggregate_thresholds=None, k_list=None):
-    if aggregate_thresholds is None:
-        aggregate_thresholds = [thr / 100 for thr in range(20, 60, 10)]
+def try_configuration(task:str, filter_fn=None, name=".", thresholds=None, k_list=None):
     if thresholds is None:
         thresholds = [thr / 100 for thr in range(30, 80, 10)]
     if k_list is None:
@@ -103,7 +101,7 @@ def try_configuration(task:str, filter_fn=None, name=".", thresholds=None, aggre
     if not name == ".":
         if not os.path.exists(f"training_data/{name}"):
             os.mkdir(f"training_data/{name}")
-    base_path = "training_data/training_set"
+    base_path = "training_data/validation_set"
     results = {}
     print(f"{task} ", end="")
     torch.cuda.empty_cache()
@@ -119,13 +117,12 @@ def try_configuration(task:str, filter_fn=None, name=".", thresholds=None, aggre
         dissim_set.info = f"dissimilar {k}"
         descriptor_sets.append(dissim_set)
     for threshold in thresholds:
-        for aggregate_threshold in aggregate_thresholds:
-            for descriptor_set in descriptor_sets:
-                torch.cuda.empty_cache()
-                configuration = DescriptorConfiguration(descriptor_set, threshold, aggregate_threshold)
-                compare_single(base_path, task, configuration, filter_fn=filter_fn)
-                results[task].append(configuration)
-            print(threshold, end=" ")
+        for descriptor_set in descriptor_sets:
+            torch.cuda.empty_cache()
+            configuration = DescriptorConfiguration(descriptor_set, threshold,0)
+            run_experiment(base_path, task, configuration, filter_fn=filter_fn)
+            results[task].append(configuration)
+        print(threshold, end=" ")
     for descriptor_set in descriptor_sets:
         descriptor_set.descriptors = None
     pkl.dump(results, open(f"training_data/{name}/descriptor_configuration_result_{task}.pkl", "wb"))
@@ -157,74 +154,118 @@ def extract_top_k_results(result_dict, k=10, sort_fn=lambda conf: conf.f1):
         descriptors[task] = top_k[0]
     return (new_res, descriptors)
 
-def optimize_configurations(task:str, iterations:int, k:int, performance_metric=lambda conf: (conf.f1,conf.precision)):
+
+def optimize_configurations(task:str, iterations:int, k:int, performance_metric=lambda conf: (conf.f1,conf.precision), filter_fn= None, name:str ="optim", explore =0.2):
     thresholds = [thr / 100 for thr in range(20, 100, 20)]
-    aggregate_perc = [perc / 100 for perc in range(20, 60, 10)]
-    k_list = [8]
+    k_list = [8,14,20]
     top_k = []
+    all_res =[]
     for i in range(1,iterations+1):
         print(f"Epoch {i}")
-        print(f"Next iter: Thresholds: {thresholds}, Agg%: {aggregate_perc}, k_list: {k_list}")
-        results = try_configuration(task,lambda name:"_1" in name[0],"hand_optim",thresholds,aggregate_perc, k_list)[task]
+        print(f"Next iter: Thresholds: {thresholds},  k_list: {k_list}")
+        results = try_configuration(task,filter_fn=filter_fn,name=name,thresholds=thresholds, k_list=k_list)[task]
         sorted_res = sorted(results, reverse=True, key=performance_metric)
         top_k = sorted_res[:k]
+        all_res.extend(top_k)
         old_thresholds = []
-        old_aggr = []
         old_k_list = []
         for conf in top_k:
             old_thresholds.append(conf.threshold)
-            old_aggr.append(conf.aggregation_percentage)
             if conf.descriptor_set.info is not None:
                 old_k_list.append(int(conf.descriptor_set.info.split(" ")[1]))
         old_thresholds = list(dict.fromkeys(old_thresholds))
-        old_aggr = list(dict.fromkeys(old_aggr))
         old_k_list = list(dict.fromkeys(old_k_list))
         thresholds = []
-        for threshold in old_thresholds:
-            thresholds.append(threshold)
-            thresholds.append(threshold + (0.2 / (2*i)))
-            thresholds.append(threshold - (0.2 / (2*i)))
-        thresholds = list(dict.fromkeys(thresholds))
-        aggregate_perc = []
-        for agg in old_aggr:
-            aggregate_perc.append(agg)
-            aggregate_perc.append(agg + (0.1 / (2*i)))
-            aggregate_perc.append(agg + (0.1 / (2*i)))
-        aggregate_perc = list(dict.fromkeys(aggregate_perc))
+        thr_min = min(old_thresholds)
+        thr_max = max(old_thresholds)
+        thr_step = (thr_max - thr_min)/4
+        if thr_step == 0.:
+            thr_step = thr_min * explore
+            thr_max = thr_min + thr_step * 2
+            thr_min = thr_min - thr_step * 2
+        thr_range = torch.arange(thr_min + thr_step, thr_max, thr_step)
+        for th in thr_range:
+            thresholds.append(round(th.item(),3))
         k_list = []
-        for curr_k in old_k_list:
-            k_list.append(curr_k)
-            k_list.append(curr_k+1)
-            k_list.append(curr_k-1)
+        if len(old_k_list) == 0:
+            continue
+        k_min = min(old_k_list)
+        k_max = max(old_k_list)
+        k_step = (k_max - k_min)/4
+        if k_step == 0.:
+            k_step = k_min * 4 * explore
+            k_max = k_min + k_step * 2
+            k_min = k_min - k_step * 2
+        k_min = max(2,k_min)
+        k_range = torch.arange(k_min + k_step, k_max, k_step)
+        if k_step == 0.:
+            continue
+        for kk in k_range:
+            k_list.append(int(kk.item()))
         k_list = list(dict.fromkeys(k_list))
-    return top_k
+    return sorted(all_res, reverse=True, key=performance_metric)
 
 
+def run_experiment(img_src: str, task: str, config: DescriptorConfiguration, filter_fn:Callable = None):
+    net = TaskClassifier(vit_stride=4, descriptors={config.descriptor_set.task: config})
+    [_, dataset] = net.load_cache(img_src, filter_fn=filter_fn)
+    data_loader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
+    obj_finder = net.obj_finder
+    class_mapping = obj_finder.class_mapping
+    pos = torch.tensor([],device=device)
+    neg = torch.tensor([],device=device)
+    for [tensors, labels] in data_loader:
+        tensor = obj_finder(tensors).detach()
+        should_be = labels == class_mapping[task]
+        thresholds = tensor[:,2]
+        pos = torch.cat((pos, thresholds[should_be]))
+        neg = torch.cat((neg, thresholds[~should_be]))
+    [metrics, agg] = compute_aggregation_percentage(pos,neg)
+    config.aggregation_percentage = agg
+    config.record_performance(metrics["tp"],metrics["fn"],metrics["fp"],-1,-1,-1)
 
+
+def compute_aggregation_percentage(pos_thr: torch.Tensor, neg_thr: torch.Tensor):
+    pos = torch.sort(pos_thr).values
+    neg = torch.sort(neg_thr).values
+    agg_idx = 0
+    agg = pos[0]
+    metrics = get_metrics(pos, neg, agg)
+    for i in range(1, pos.shape[0]):
+        curr_agg = pos[i]
+        curr_metrics = get_metrics(pos,neg,agg)
+        if curr_metrics["f1"] > metrics["f1"]:
+            metrics = curr_metrics
+            agg = curr_agg
+    return [metrics, agg]
+
+def get_metrics(pos:torch.Tensor, neg: torch.Tensor, agg: float):
+    tp = torch.count_nonzero(pos >= agg).item()
+    fn = torch.count_nonzero(pos < agg).item()
+    fp = torch.count_nonzero(neg >= agg).item()
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    f1 = 2 * (prec * rec / (prec + rec))
+    return {"f1": f1, "prec": prec, "rec": rec, "tp":tp, "fp": fp, "fn": fn}
 
 if __name__ == '__main__':
     for i in range(len(custom_single_tasks)):
-        optim_config = optimize_configurations(custom_single_tasks[i],8,6)
-        pkl.dump(optim_config, open(f"training_data/optim_{custom_single_tasks[i]}","wb"))
+        optim_config = optimize_configurations(custom_single_tasks[i],6,6, filter_fn=lambda name:"_0" in name[0], name="static")
+        pkl.dump(optim_config, open(f"training_data/optim_{custom_single_tasks[i]}_static.pkl","wb"))
     all_desc = {}
     for i in range(len(custom_single_tasks)):
-        config = pkl.load(open(f"training_data/optim_{custom_single_tasks[i]}","rb"))
+        config = pkl.load(open(f"training_data/optim_{custom_single_tasks[i]}_static.pkl","rb"))
         config[0].descriptor_set.reload_descriptors()
         all_desc[custom_single_tasks[i]]=(config[0])
-    pkl.dump(all_desc, open(f"training_data/optim.pkl","wb"))
-    # try_configurations(lambda name : "_0" in name[0], name="static_cam_v0")
-    # try_configurations(lambda name : "_1" in name[0], name="hand_cam_v0")
-    # try_configurations(name="both_cam_v0")
-    # try_configurations()
-    # combine_results()
-    # results_hand = pkl.load(open(f"training_data/hand_cam_v0/results_combined.pkl", "rb"))
-    # results_static = pkl.load(open(f"training_data/static_cam_v0/results_combined.pkl", "rb"))
-    # hand_k_top, descr_hand = extract_top_k_results(results_hand)
-    # static_k_top, descr_static = extract_top_k_results(results_static, sort_fn=lambda c: (c.precision,c.f1))
-    # for (hand, static) in zip(descr_hand.values(), descr_static.values()):
-    #     hand.descriptor_set.reload_descriptors()
-    #     static.descriptor_set.reload_descriptors()
-    # # pkl.dump(descr_hand, open(f"training_data/hand_descriptors.pkl","wb"))
-    # # pkl.dump(descr_static, open(f"training_data/static_descriptors.pkl", "wb"))
-    # print(hand_k_top)
-    # print(static_k_top)
+    pkl.dump(all_desc, open(f"training_data/optim_static.pkl","wb"))
+
+    for i in range(len(custom_single_tasks)):
+        optim_config = optimize_configurations(custom_single_tasks[i],6,6, filter_fn=lambda name:"_1" in name[0], name="hand")
+        pkl.dump(optim_config, open(f"training_data/optim_{custom_single_tasks[i]}_hand.pkl","wb"))
+    all_desc = {}
+    for i in range(len(custom_single_tasks)):
+        config = pkl.load(open(f"training_data/optim_{custom_single_tasks[i]}_hand","rb"))
+        config[0].descriptor_set.reload_descriptors()
+        all_desc[custom_single_tasks[i]]=(config[0])
+    pkl.dump(all_desc, open(f"training_data/optim_hand.pkl","wb"))
+
