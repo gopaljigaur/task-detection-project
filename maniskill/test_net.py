@@ -5,15 +5,15 @@ import torch
 from torch.utils.data import DataLoader
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-net = TaskClassifier(vit_stride=4).to(device)
+train_net = TaskClassifier(vit_stride=4).to(device)
+net = torch.load("model_20.pth")
+net.eval()
 
 test_image_path = "training_data/test_set"
-net.preprocess(test_image_path)
-tensor_data_set = net.load_cache(test_image_path)[1]
+train_net.preprocess(test_image_path)
+tensor_data_set = train_net.load_cache("training_data/test_set")[1]
 data_loader = DataLoader(dataset=tensor_data_set, batch_size=64, shuffle=True)
 print("preprocessing done")
-
-net.eval()
 
 correct = 0
 total = 0

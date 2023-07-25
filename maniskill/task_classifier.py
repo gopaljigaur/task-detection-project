@@ -23,7 +23,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class TaskClassifier(nn.Module):
 
-    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: dict=None, hidden_sizes: List[int] = [64, 32]):
+    def __init__(self, vit_stride=2, vit_patch_size=8, n_classes: int = 5, threshold: List[float] = None, descriptors: dict=None, hidden_sizes: List[int] = [32, 16]):
         super().__init__()
         self.n_classes = n_classes
         self.hidden_sizes = hidden_sizes
