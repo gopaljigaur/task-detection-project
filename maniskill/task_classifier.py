@@ -74,6 +74,17 @@ class TaskClassifier(nn.Module):
                 tensor = self.cache_object_output(tensor)
                 torch.save(tensor, f"{image.split('.')[0]}.pt")
 
+    def calculate_and_save_object_locations(self, image_base_path:str, filter_fn: Callable[[str], bool]=None):
+        dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
+        images = dataset.imgs
+        if filter_fn is not None:
+            images = filter(filter_fn, images)
+        for [image, label] in images:
+            desc = torch.load(image.split(".")[0]+".pt")
+            tensor = self.cached_forward(desc)
+            tensor = tensor.reshape(5,3)[:,2]
+            torch.save(tensor.cpu(), f"{image.split('.')[0]}.obj_agg")
+
     def load_cache(self, image_base_path: str, filter_fn: Callable[[str], bool]=None):
         dataset = ImageFolder(image_base_path, transform=transforms.ToTensor())
         if filter is None:
