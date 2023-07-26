@@ -32,8 +32,8 @@ def get_descriptor_for_labeled(image_path: str, coordinates: str):
         return descs[:,:,int(descriptor_idx),:].unsqueeze(0)
 
 
-def read_points(task_folder: str):
-    with open(os.path.join(task_folder, "labels.yml"), "r") as label_file:
+def read_points(task_folder: str, fname = "labels.yml"):
+    with open(os.path.join(task_folder, fname), "r") as label_file:
         points = []
         files = []
         try:
@@ -47,13 +47,13 @@ def read_points(task_folder: str):
         return [files, points]
 
 
-def extract_descriptors(tasks: List[str], descriptor_amount: int = None):
+def extract_descriptors(tasks: List[str], descriptor_amount: int = None, fname="labels.yml"):
     # in all_descriptors all the descriptors for the objects will be safed
     descriptors = []
     tasks.sort()
     for task in tasks:
         task_folder = os.path.join(f"training_data/training_set", task)
-        [files, points] = read_points(task_folder)
+        [files, points] = read_points(task_folder,fname)
         current_descriptors = torch.tensor([], device=device)
         zipped = list(zip(files, points))
         zip_idx = list(range(0, len(zipped)))
