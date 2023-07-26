@@ -61,7 +61,7 @@ def f1(precision,recall):
 
 
 if __name__ == "__main__":
-    res = test_config("training_data/validation_set", configs=pkl.load(open("training_data/optim_hand.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
-    pkl.dump(res, open("training_data/results_val.pkl","wb"))
-    res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim_hand.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
-    pkl.dump(res, open("training_data/results_test.pkl","wb"))
+    res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim_multi_static.pkl","rb")), filter_fn=lambda name: "_0" in name[0])
+    pkl.dump(res, open("training_data/result_val_static.pkl","wb"))
+    res = test_config("training_data/test_set", configs=pkl.load(open("training_data/optim_multi_hand.pkl","rb")), filter_fn=lambda name: "_1" in name[0])
+    pkl.dump(res, open("training_data/result_val_hand.pkl","wb"))
