@@ -32,4 +32,6 @@ def plot_img(img_path:str):
 
 
 if __name__ == "__main__":
-    plot_img("training_data/training_set_multiple/ReleaseBlock-v0/1690207701091_1.png")
+    net = TaskClassifier(vit_stride=4)
+    net.preprocess("training_data/custom")
+    plot_img("training_data/custom/cl/cheated.png")
