@@ -8,7 +8,7 @@ from sapien.core import Pose
 from transforms3d.euler import euler2quat
 from transforms3d.quaternions import axangle2quat, qmult
 
-multiobject_tasks = ["DrillBlock-v0", "MarkBlock-v0", "ReleaseBlock-v0", "CollectTools-v0"]
+multiobject_tasks = ["DrillBlock-v0", "FastenBlock-v0", "ReleaseBlock-v0", "CollectTools-v0"]
 
 class MultipleObjectTask(PickClutterEnv):
     # DEFAULT_EPISODE_JSON = "{ASSET_DIR}/pick_clutter/ycb_train_5k.json.gz"

@@ -8,7 +8,7 @@ from mani_skill2.utils.io_utils import dump_json
 from transforms3d.euler import euler2quat
 
 
-def create_episodes(model_ids: List[str], poses: List[List[float]], n_episodes:int = 50, shuffle=False, distance: List[float] = [0.1,1.]):
+def create_episodes(model_ids: List[str], poses: List[List[float]], n_episodes:int = 50, shuffle=False, distance: List[float] = [0.15,1.]):
     episodes = []
     if shuffle:
         random.shuffle(model_ids)
@@ -28,7 +28,7 @@ def create_episodes(model_ids: List[str], poses: List[List[float]], n_episodes:i
             if tries_left == 0:
                 print(f"not found for {model_ids} {distance}")
                 break
-            z = 0.03
+            z = 0.05
             p = np.hstack([xy, z])
             ori = np.random.uniform(0, 2 * np.pi)
             q = euler2quat(0, 0, ori)
@@ -67,7 +67,7 @@ def create_release_block():
     base_path = "../data/release_block"
     model_ids = ["070-a_colored_wood_blocks","052_extra_large_clamp"]
     poses = [[-0.3,0.3],[-0.3,0.3]]
-    episodes = create_episodes(model_ids, poses, shuffle=True, distance=[0.15,0.2])
+    episodes = create_episodes(model_ids, poses, shuffle=True, distance=[0.15,0.25])
     if not os.path.exists(base_path):
         os.mkdir(base_path)
     dump_json(os.path.join(base_path, "episode.json.gz"), episodes)
